@@ -90,6 +90,20 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     edgeId: string | null
   }>({ open: false, x: 0, y: 0, edgeId: null })
 
+  // Canvas context menu state (for adding new nodes)
+  const [canvasContextMenu, setCanvasContextMenu] = useState<{
+    open: boolean
+    x: number
+    y: number
+  }>({ open: false, x: 0, y: 0 })
+
+  // Edge drawing state
+  const [isDrawingEdge, setIsDrawingEdge] = useState(false)
+  const [edgeStartNode, setEdgeStartNode] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [previewEdge, setPreviewEdge] = useState<{ from: string; to: { x: number; y: number } } | null>(null)
+
   // Update initialFramework when framework changes from outside (prop)
   useEffect(() => {
     if (initialFramework === null) {
@@ -214,6 +228,20 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   // Get the argument object for a node ID
   const getArgument = (nodeId: string): Argument | null => {
     return framework.args.find((arg) => arg.id === nodeId) || null
+  }
+
+  // Generate a unique node ID
+  const generateNodeId = (): string => {
+    const existingIds = framework.args.map(arg => arg.id)
+    let counter = 1
+    let newId = `N${counter}`
+
+    while (existingIds.includes(newId)) {
+      counter++
+      newId = `N${counter}`
+    }
+
+    return newId
   }
 
   // Get the provenance info for a node ID
@@ -447,11 +475,26 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             },
           },
           {
-            selector: ".selected",
+            selector: "edge.selected",
             style: {
               "line-color": "#3b82f6",
               "target-arrow-color": "#3b82f6",
               width: 3,
+            },
+          },
+          {
+            selector: "node.selected",
+            style: {
+              "border-width": 3,
+              "border-color": "#3b82f6",
+            },
+          },
+          {
+            selector: "node.edge-start",
+            style: {
+              "border-width": 3,
+              "border-color": "#10b981",
+              "border-style": "solid",
             },
           },
           {
@@ -510,6 +553,77 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         setHoveredNode(null)
       })
 
+      // Handle node mouse events for drag-to-draw
+      cyRef.current.on("mousedown", "node", (event) => {
+        if (isDrawingEdge) {
+          const node = event.target
+          const nodeId = node.id()
+
+          // Start dragging from this node
+          setEdgeStartNode(nodeId)
+          setIsDragging(true)
+
+          // Highlight the start node
+          cyRef.current?.nodes().removeClass("edge-start")
+          node.addClass("edge-start")
+
+          // Set custom cursor
+          if (containerRef.current) {
+            containerRef.current.style.cursor = 'crosshair'
+          }
+
+          // Get node position for preview edge
+          const pos = node.renderedPosition()
+          setPreviewEdge({ from: nodeId, to: { x: pos.x, y: pos.y } })
+
+          event.preventDefault()
+        }
+      })
+
+      cyRef.current.on("mouseup", "node", (event) => {
+        if (isDragging && edgeStartNode) {
+          const node = event.target
+          const nodeId = node.id()
+
+          if (edgeStartNode !== nodeId) {
+            // Create edge
+            console.log("Creating edge from", edgeStartNode, "to", nodeId)
+            const newAttack: Attack = {
+              from: edgeStartNode,
+              to: nodeId,
+              annotation: "",
+            }
+
+            // Check if edge already exists
+            const edgeExists = framework.attacks.some(
+              attack => attack.from === edgeStartNode && attack.to === nodeId
+            )
+
+            if (!edgeExists) {
+              const newFramework: ArgumentFramework = {
+                ...framework,
+                attacks: [...framework.attacks, newAttack],
+              }
+              onFrameworkChange(newFramework)
+              console.log("Edge created successfully")
+            } else {
+              console.log("Edge already exists")
+            }
+          }
+
+          // Reset state
+          setIsDragging(false)
+          setEdgeStartNode(null)
+          setPreviewEdge(null)
+          cyRef.current?.nodes().removeClass("edge-start")
+
+          // Reset cursor
+          if (containerRef.current) {
+            containerRef.current.style.cursor = 'default'
+          }
+        }
+      })
+
       cyRef.current.on("tap", "node", (event) => {
         const node = event.target
         const nodeId = node.id()
@@ -524,13 +638,21 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
         // If the node is already selected, deselect it
         if (selectedNode === nodeId) {
+          // Clear node selection
+          cyRef.current?.nodes().removeClass("selected")
           setSelectedNode(null)
           clearHighlighting()
         } else {
-          // Otherwise, select it and highlight related nodes
+          // Clear previous node selection
+          cyRef.current?.nodes().removeClass("selected")
+          // Select the clicked node
+          node.addClass("selected")
+
+          // Otherwise, select it (but don't highlight provenance automatically)
           setSelectedNode(nodeId)
-          setSelectedEdge(null) // Clear edge selection
-          highlightProvenanceNodes(nodeId)
+          // Clear edge selection - only one type can be selected at a time
+          cyRef.current?.edges().removeClass("selected")
+          setSelectedEdge(null)
         }
       })
 
@@ -544,7 +666,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           setEdgeContextMenu(c => ({ ...c, open: false }))
         }
 
-        // Clear previous selection
+        // Clear previous edge selection
         cyRef.current?.edges().removeClass("selected")
 
         // Select the clicked edge
@@ -557,25 +679,22 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
         // Set the selected edge
         setSelectedEdge({ from: sourceId, to: targetId })
-        setSelectedNode(null) // Clear node selection
-        clearHighlighting()
+        // Clear node selection - only one type can be selected at a time
+        cyRef.current?.nodes().removeClass("selected")
+        setSelectedNode(null)
       })
 
       // Clear selection when clicking on the background
       cyRef.current.on("tap", (event) => {
         if (cyRef.current && event.target === cyRef.current) {
-          // Close context menu if open
-          if (contextMenu.open) {
-            setContextMenu(c => ({ ...c, open: false }))
+          // Only clear selection if no context menu is open
+          if (!contextMenu.open && !edgeContextMenu.open) {
+            cyRef.current.edges().removeClass("selected")
+            cyRef.current.nodes().removeClass("selected")
+            setSelectedEdge(null)
+            setSelectedNode(null)
+            clearHighlighting()
           }
-          if (edgeContextMenu.open) {
-            setEdgeContextMenu(c => ({ ...c, open: false }))
-          }
-
-          cyRef.current.edges().removeClass("selected")
-          setSelectedEdge(null)
-          setSelectedNode(null)
-          clearHighlighting()
         }
       })
 
@@ -643,7 +762,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     return () => {
       // No need to destroy cytoscape instance, we'll reuse it
     }
-  }, [framework, semantics, currentLayout, graphvizConfig.allowBackwardArrows])
+  }, [framework, semantics, currentLayout, graphvizConfig.allowBackwardArrows, isDrawingEdge])
 
   // Update node colors when graphviz config changes
   useEffect(() => {
@@ -665,16 +784,75 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     }
   }, [provenanceRadio, selectedNode])
 
+  // Handle drag-to-draw edge system
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isDragging && edgeStartNode) {
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (rect) {
+          const x = event.clientX - rect.left
+          const y = event.clientY - rect.top
+          setMousePosition({ x, y })
+          setPreviewEdge({ from: edgeStartNode, to: { x, y } })
+        }
+      }
+    }
+
+    const handleMouseUp = () => {
+      if (isDragging) {
+        setIsDragging(false)
+        setEdgeStartNode(null)
+        setPreviewEdge(null)
+        if (cyRef.current) {
+          cyRef.current.nodes().removeClass("edge-start")
+        }
+        // Reset cursor
+        if (containerRef.current) {
+          containerRef.current.style.cursor = 'default'
+        }
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'e' || event.key === 'E') {
+        event.preventDefault()
+        if (isDrawingEdge) {
+          handleStopEdgeDrawing()
+        } else {
+          handleStartEdgeDrawing()
+        }
+      }
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isDragging, edgeStartNode, isDrawingEdge])
+
   // Open context menu on right-click (cxttap) on node
   useEffect(() => {
     if (!cyRef.current) return
     const cy = cyRef.current
     const handler = (event: any) => {
       event.preventDefault()
-      const nodeId = event.target.id()
+      const node = event.target
+      const nodeId = node.id()
       const { x, y } = event.renderedPosition || event.position || { x: 0, y: 0 }
       // Convert Cytoscape rendered position to page coordinates
       const rect = containerRef.current?.getBoundingClientRect()
+
+      // Set selection state and apply visual highlighting
+      setSelectedNode(nodeId)
+      // Clear edge selection - only one type can be selected at a time
+      cyRef.current?.edges().removeClass("selected")
+      setSelectedEdge(null)
+
       setContextMenu({
         open: true,
         x: (rect?.left || 0) + x,
@@ -694,10 +872,28 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     const cy = cyRef.current
     const handler = (event: any) => {
       event.preventDefault()
-      const edgeId = event.target.id()
+      const edge = event.target
+      const edgeId = edge.id()
       const { x, y } = event.renderedPosition || event.position || { x: 0, y: 0 }
       // Convert Cytoscape rendered position to page coordinates
       const rect = containerRef.current?.getBoundingClientRect()
+
+      // Set selection state and apply visual highlighting
+      // Clear previous edge selection
+      cy.edges().removeClass("selected")
+      // Select the clicked edge
+      edge.addClass("selected")
+
+      // Get the source and target nodes
+      const sourceId = edge.source().id()
+      const targetId = edge.target().id()
+
+      // Set the selected edge
+      setSelectedEdge({ from: sourceId, to: targetId })
+      // Clear node selection - only one type can be selected at a time
+      cyRef.current?.nodes().removeClass("selected")
+      setSelectedNode(null)
+
       setEdgeContextMenu({
         open: true,
         x: (rect?.left || 0) + x,
@@ -711,6 +907,38 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     }
   }, [cyRef.current])
 
+  // Open context menu on right-click (cxttap) on canvas background
+  useEffect(() => {
+    if (!cyRef.current) return
+    const cy = cyRef.current
+    const handler = (event: any) => {
+      event.preventDefault()
+
+      // Only proceed if the target is the canvas itself (not a node or edge)
+      if (event.target === cy) {
+        const { x, y } = event.renderedPosition || event.position || { x: 0, y: 0 }
+        // Convert Cytoscape rendered position to page coordinates
+        const rect = containerRef.current?.getBoundingClientRect()
+
+        // Clear any existing selections
+        cy.edges().removeClass("selected")
+        cy.nodes().removeClass("selected")
+        setSelectedEdge(null)
+        setSelectedNode(null)
+
+        setCanvasContextMenu({
+          open: true,
+          x: (rect?.left || 0) + x,
+          y: (rect?.top || 0) + y,
+        })
+      }
+    }
+    cy.on("cxttap", handler)
+    return () => {
+      cy.off("cxttap", handler)
+    }
+  }, [cyRef.current])
+
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -720,27 +948,39 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       if (edgeContextMenu.open) {
         setEdgeContextMenu(c => ({ ...c, open: false }))
       }
+      if (canvasContextMenu.open) {
+        setCanvasContextMenu(c => ({ ...c, open: false }))
+      }
     }
 
-    if (contextMenu.open || edgeContextMenu.open) {
+    if (contextMenu.open || edgeContextMenu.open || canvasContextMenu.open) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
-  }, [contextMenu.open, edgeContextMenu.open])
+  }, [contextMenu.open, edgeContextMenu.open, canvasContextMenu.open])
 
   // Close context menu on any mouse interaction with the graph container
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    const handleMouseInteraction = () => {
-      if (contextMenu.open) {
-        setContextMenu(c => ({ ...c, open: false }))
-      }
-      if (edgeContextMenu.open) {
-        setEdgeContextMenu(c => ({ ...c, open: false }))
+    const handleMouseInteraction = (event: MouseEvent) => {
+      // Only close context menu if clicking outside of it
+      const target = event.target as Element
+      const isContextMenu = target.closest('[data-context-menu]')
+
+      if (!isContextMenu) {
+        if (contextMenu.open) {
+          setContextMenu(c => ({ ...c, open: false }))
+        }
+        if (edgeContextMenu.open) {
+          setEdgeContextMenu(c => ({ ...c, open: false }))
+        }
+        if (canvasContextMenu.open) {
+          setCanvasContextMenu(c => ({ ...c, open: false }))
+        }
       }
     }
 
@@ -862,6 +1102,45 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     setCurrentLayout(layoutName)
   }
 
+  // Handle adding new node
+  const handleAddNewNode = () => {
+    const newNodeId = generateNodeId()
+    const newNode: Argument = {
+      id: newNodeId,
+      annotation: `New Argument ${newNodeId}`,
+      url: "",
+    }
+
+    const newFramework: ArgumentFramework = {
+      ...framework,
+      args: [...framework.args, newNode],
+    }
+
+    onFrameworkChange(newFramework)
+    setCanvasContextMenu({ open: false, x: 0, y: 0 })
+  }
+
+  // Handle starting edge drawing mode
+  const handleStartEdgeDrawing = () => {
+    setIsDrawingEdge(true)
+    setCanvasContextMenu({ open: false, x: 0, y: 0 })
+  }
+
+  const handleStopEdgeDrawing = () => {
+    setIsDrawingEdge(false)
+    setIsDragging(false)
+    setEdgeStartNode(null)
+    setPreviewEdge(null)
+    if (cyRef.current) {
+      cyRef.current.nodes().removeClass("edge-start")
+    }
+    if (containerRef.current) {
+      containerRef.current.style.cursor = 'default'
+    }
+  }
+
+
+
   // Zoom controls
   const handleZoomIn = () => {
     if (!cyRef.current) return
@@ -898,6 +1177,25 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       <div className="relative">
         <div ref={containerRef} className="flex-1 w-full" />
 
+        {/* Edge drawing status indicator */}
+        {isDrawingEdge && (
+          <div className="absolute top-4 right-4 z-30 bg-blue-500 text-white px-3 py-2 rounded-md shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Drawing Edge</span>
+            </div>
+            {edgeStartNode && (
+              <div className="text-xs mt-1">
+                Start: {edgeStartNode} → Drag to target node
+              </div>
+            )}
+            {!edgeStartNode && (
+              <div className="text-xs mt-1">
+                Click and drag from source node
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Node context menu */}
         {contextMenu.open && (
           <div
@@ -906,6 +1204,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               left: contextMenu.x,
               top: contextMenu.y,
             }}
+            data-context-menu="node"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="py-1">
@@ -994,6 +1293,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               left: edgeContextMenu.x,
               top: edgeContextMenu.y,
             }}
+            data-context-menu="edge"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="py-1">
@@ -1012,6 +1312,79 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               </button>
             </div>
           </div>
+        )}
+
+        {/* Canvas context menu */}
+        {canvasContextMenu.open && (
+          <div
+            className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
+            style={{
+              left: canvasContextMenu.x,
+              top: canvasContextMenu.y,
+            }}
+            data-context-menu="canvas"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="py-1">
+              <button
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                onMouseDown={(e) => { e.stopPropagation(); handleAddNewNode(); }}
+              >
+                Add New Node
+              </button>
+              <div className="border-t border-gray-100 my-1"></div>
+              <button
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                onMouseDown={(e) => { e.stopPropagation(); handleStartEdgeDrawing(); }}
+              >
+                Draw Edge
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edge preview */}
+        {previewEdge && cyRef.current && (
+          (() => {
+            const sourceNode = cyRef.current.getElementById(previewEdge.from)
+            if (sourceNode.length === 0) return null
+
+            const sourcePos = sourceNode.renderedPosition()
+            return (
+              <svg
+                className="absolute inset-0 pointer-events-none z-10"
+                style={{ width: '100%', height: '100%' }}
+              >
+                <defs>
+                  <marker
+                    id="preview-arrowhead"
+                    markerWidth="10"
+                    markerHeight="7"
+                    refX="9"
+                    refY="3.5"
+                    orient="auto"
+                  >
+                    <polygon
+                      points="0 0, 10 3.5, 0 7"
+                      fill="#3b82f6"
+                      opacity="0.7"
+                    />
+                  </marker>
+                </defs>
+                <line
+                  x1={sourcePos.x}
+                  y1={sourcePos.y}
+                  x2={previewEdge.to.x}
+                  y2={previewEdge.to.y}
+                  stroke="#3b82f6"
+                  strokeWidth="2"
+                  strokeDasharray="5,5"
+                  opacity="0.7"
+                  markerEnd="url(#preview-arrowhead)"
+                />
+              </svg>
+            )
+          })()
         )}
 
         {/* Top left controls */}
