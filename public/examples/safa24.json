@@ -1,0 +1,122 @@
+{
+  "name": "safa24",
+  "arguments": [
+    {
+      "id": "A1",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "A2",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "B2",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "C2",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "B1",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "C1",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "D",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "E",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "F",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "X",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "Y",
+      "annotation": "",
+      "url": ""
+    }
+  ],
+  "defeats": [
+    {
+      "from": "A1",
+      "to": "B1",
+      "annotation": ""
+    },
+    {
+      "from": "B1",
+      "to": "C1",
+      "annotation": ""
+    },
+    {
+      "from": "C1",
+      "to": "D",
+      "annotation": ""
+    },
+    {
+      "from": "A2",
+      "to": "B2",
+      "annotation": ""
+    },
+    {
+      "from": "B2",
+      "to": "C2",
+      "annotation": ""
+    },
+    {
+      "from": "C2",
+      "to": "D",
+      "annotation": ""
+    },
+    {
+      "from": "D",
+      "to": "E",
+      "annotation": ""
+    },
+    {
+      "from": "E",
+      "to": "F",
+      "annotation": ""
+    },
+    {
+      "from": "F",
+      "to": "X",
+      "annotation": ""
+    },
+    {
+      "from": "F",
+      "to": "Y",
+      "annotation": ""
+    },
+    {
+      "from": "X",
+      "to": "Y",
+      "annotation": ""
+    },
+    {
+      "from": "Y",
+      "to": "X",
+      "annotation": ""
+    }
+  ]
+}

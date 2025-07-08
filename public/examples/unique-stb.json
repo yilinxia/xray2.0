@@ -1,0 +1,62 @@
+{
+    "name": "unique-stb",
+    "arguments": [
+        {
+            "id": "a",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "b",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "c",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "d",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "e",
+            "annotation": "",
+            "url": ""
+        }
+    ],
+    "defeats": [
+        {
+            "from": "a",
+            "to": "b",
+            "annotation": ""
+        },
+        {
+            "from": "b",
+            "to": "a",
+            "annotation": ""
+        },
+        {
+            "from": "b",
+            "to": "c",
+            "annotation": ""
+        },
+        {
+            "from": "c",
+            "to": "d",
+            "annotation": ""
+        },
+        {
+            "from": "d",
+            "to": "e",
+            "annotation": ""
+        },
+        {
+            "from": "e",
+            "to": "c",
+            "annotation": ""
+        }
+    ]
+}

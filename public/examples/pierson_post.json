@@ -1,0 +1,152 @@
+{
+  "name": "pierson_post",
+  "arguments": [
+    {
+      "id": "A",
+      "name": "Pursuer had right to animal",
+      "type": "claim",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "Post, the pursuer, had no right to the fox: \"The foregoing authorities are decisive to show that mere pursuit gave Post no legal right to the fox, but that he became the property of Pierson, who intercepted and killed him.\"",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "B",
+      "name": "Pursuer not in possession",
+      "type": "opinion",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "Pursuer was not in possession of the fox.",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "D",
+      "name": "Animals not confined by owner",
+      "type": "fact",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "The fox is a wild animal and was not confined by anyone.",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "E",
+      "name": "Effort promising success made to secure animal made by pursuer",
+      "type": "fact",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "Post pursued the fox with his own hounds and was \"on the point of seizing his prey.\"",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "I",
+      "name": "Pursuit not enough",
+      "type": "opinion",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "The court opinion, written by Tompkins, cited Justinian's Institutes to argue that pursuit alone, even with wounding, is insufficient to establish ownership unless the animal is actually taken.",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "M",
+      "name": "Mere pursuit is not enough",
+      "type": "opinion",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "Written by Tompkins: \"Mere pursuit gave Post no legal right to the fox.\"",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "N",
+      "name": "Justinian is too old an authority",
+      "type": "opinion",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "Livingston dissented: \"Whatever Justinian may have thought... his code was compiled many hundred years ago... it would be very hard indeed... not to have a right to establish a rule for ourselves.\"",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "O",
+      "name": "Bodily seizure is not necessary, reasonable prospect of capture is enough",
+      "type": "opinion",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "Livingston, quoting Barbeyrac, argued that property in wild animals can be acquired without physical seizure if the pursuer had a reasonable prospect of capturing the animal.",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "Q",
+      "name": "The land was open",
+      "type": "fact",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "The hunt occurred \"on waste and uninhabited ground.\"",
+      "url": "https://cite.case.law/cai/3/175/"
+    },
+    {
+      "id": "U",
+      "name": "Not for courts to regulate competition",
+      "type": "opinion",
+      "case_name": "Pierson v Post",
+      "case_year": 1805,
+      "citation": "3 Cai. R. 175 (N.Y. 1805)",
+      "context": "The court warned that ruling otherwise would open the door to excessive litigation, implying courts should not regulate such competitive conduct.",
+      "url": "https://cite.case.law/cai/3/175/"
+    }
+  ],
+  "defeats": [
+    {
+      "from": "B",
+      "to": "A",
+      "annotation": "Arguing Post did not possess the fox"
+    },
+    {
+      "from": "E",
+      "to": "B",
+      "annotation": "Promising efforts to catch the fox rather than in possession can already help establish the fox's ownership"
+    },
+    {
+      "from": "E",
+      "to": "D",
+      "annotation": "Promising efforts to catch the fox rather than confining it can already help establish the fox's ownership"
+    },
+    {
+      "from": "I",
+      "to": "E",
+      "annotation": "According to Justinian, pursuit is not enough to establish the right to the animal"
+    },
+    {
+      "from": "M",
+      "to": "E",
+      "annotation": "pursuit is not enough to establish the right to the animal"
+    },
+    {
+      "from": "M",
+      "to": "O",
+      "annotation": "Judge Tompkins points out that pursuit with a reasonable prospect of capture is not enough to establish the right to the animal"
+    },
+    {
+      "from": "N",
+      "to": "I",
+      "annotation": "Quoting from Justinian is not appropriate, as it is too old an authority"
+    },
+    {
+      "from": "O",
+      "to": "I",
+      "annotation": "Judge Livingston cited Barbeyrac, claiming that a reasonable prospect of capture is enough"
+    },
+    {
+      "from": "O",
+      "to": "M",
+      "annotation": "Judge Livingston cited Barbeyrac, claiming that a reasonable prospect of capture is enough"
+    }
+  ]
+}

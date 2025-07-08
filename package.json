@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
+    "@iconify/react": "^6.0.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -41,6 +42,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
+    "cytoscape": "latest",
+    "cytoscape-dagre": "^2.5.0",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
@@ -55,8 +58,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.1",
-    "cytoscape": "latest"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22",

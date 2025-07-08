@@ -4,6 +4,7 @@ export interface Argument {
   id: string
   annotation?: string
   url?: string
+  value?: "accepted" | "defeated" | "undecided"
 }
 
 export interface Attack {

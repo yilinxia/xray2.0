@@ -1,0 +1,42 @@
+{
+  "name": "dix",
+  "arguments": [
+    {
+      "id": "a",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "b",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "c",
+      "annotation": "",
+      "url": ""
+    }
+  ],
+  "defeats": [
+    {
+      "from": "b",
+      "to": "a",
+      "annotation": ""
+    },
+    {
+      "from": "c",
+      "to": "a",
+      "annotation": ""
+    },
+    {
+      "from": "c",
+      "to": "b",
+      "annotation": ""
+    },
+    {
+      "from": "b",
+      "to": "c",
+      "annotation": ""
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+    "name": "min_uniq_stb",
+    "arguments": [
+        {
+            "id": "a",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "b",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "c",
+            "annotation": "",
+            "url": ""
+        }
+    ],
+    "defeats": [
+        {
+            "from": "a",
+            "to": "b",
+            "annotation": ""
+        },
+        {
+            "from": "b",
+            "to": "a",
+            "annotation": ""
+        },
+        {
+            "from": "b",
+            "to": "c",
+            "annotation": ""
+        },
+        {
+            "from": "c",
+            "to": "c",
+            "annotation": ""
+        }
+    ]
+}

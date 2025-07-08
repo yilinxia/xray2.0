@@ -136,10 +136,12 @@ export default function JsonEditor({ isOpen, onClose, onSave, initialFramework }
             </TabsList>
 
             <TabsContent value="arguments" className="space-y-4">
-              <Button onClick={addArgument} className="flex items-center">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Argument
-              </Button>
+              <div className="flex justify-end">
+                <Button onClick={addArgument} className="flex items-center">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Argument
+                </Button>
+              </div>
 
               {arguments_.map((arg, index) => (
                 <Card key={index} className="relative">
@@ -189,10 +191,12 @@ export default function JsonEditor({ isOpen, onClose, onSave, initialFramework }
             </TabsContent>
 
             <TabsContent value="attacks" className="space-y-4">
-              <Button onClick={addAttack} className="flex items-center" disabled={arguments_.length < 2}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Attack
-              </Button>
+              <div className="flex justify-end">
+                <Button onClick={addAttack} className="flex items-center" disabled={arguments_.length < 2}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Attack
+                </Button>
+              </div>
 
               {arguments_.length < 2 && (
                 <p className="text-sm text-muted-foreground">You need at least two arguments to create attacks.</p>

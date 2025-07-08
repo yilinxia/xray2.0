@@ -1,0 +1,102 @@
+{
+    "name": "tapp25",
+    "arguments": [
+        {
+            "id": "A",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "B",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "C",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "D",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "E",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "F",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "G",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "H",
+            "annotation": "",
+            "url": ""
+        }
+    ],
+    "defeats": [
+        {
+            "from": "A",
+            "to": "B",
+            "annotation": ""
+        },
+        {
+            "from": "B",
+            "to": "A",
+            "annotation": ""
+        },
+        {
+            "from": "A",
+            "to": "C",
+            "annotation": ""
+        },
+        {
+            "from": "C",
+            "to": "F",
+            "annotation": ""
+        },
+        {
+            "from": "F",
+            "to": "C",
+            "annotation": ""
+        },
+        {
+            "from": "C",
+            "to": "D",
+            "annotation": ""
+        },
+        {
+            "from": "D",
+            "to": "E",
+            "annotation": ""
+        },
+        {
+            "from": "E",
+            "to": "D",
+            "annotation": ""
+        },
+        {
+            "from": "E",
+            "to": "F",
+            "annotation": ""
+        },
+        {
+            "from": "E",
+            "to": "H",
+            "annotation": ""
+        },
+        {
+            "from": "G",
+            "to": "H",
+            "annotation": ""
+        }
+    ]
+}

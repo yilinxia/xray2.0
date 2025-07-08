@@ -66,14 +66,13 @@ export default function GraphvizConfig({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="flex items-center">
-          <Settings className="mr-2 h-4 w-4" />
-          Graphviz Settings
+        <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Settings className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96">
+      <PopoverContent className="w-96" side="bottom" align="start" sideOffset={5}>
         <div className="space-y-4">
-          <h3 className="font-medium">Graphviz Configuration</h3>
+          <h3 className="font-medium">Graph Configuration</h3>
 
           <div className="space-y-2">
             <Label>Layout Direction</Label>

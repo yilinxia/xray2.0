@@ -1,0 +1,47 @@
+{
+  "name": "simple_game",
+  "arguments": [
+    {
+      "id": "a",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "b",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "c",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "d",
+      "annotation": "",
+      "url": ""
+    }
+  ],
+  "defeats": [
+    {
+      "from": "b",
+      "to": "a",
+      "annotation": ""
+    },
+    {
+      "from": "a",
+      "to": "b",
+      "annotation": ""
+    },
+    {
+      "from": "c",
+      "to": "b",
+      "annotation": ""
+    },
+    {
+      "from": "d",
+      "to": "c",
+      "annotation": ""
+    }
+  ]
+}

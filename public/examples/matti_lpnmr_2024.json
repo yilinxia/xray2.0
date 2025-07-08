@@ -1,0 +1,67 @@
+{
+  "name": "matti_lpnmr_2024",
+  "arguments": [
+    {
+      "id": "a",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "b",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "c",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "d",
+      "annotation": "",
+      "url": ""
+    },
+    {
+      "id": "e",
+      "annotation": "",
+      "url": ""
+    }
+  ],
+  "defeats": [
+    {
+      "from": "e",
+      "to": "b",
+      "annotation": ""
+    },
+    {
+      "from": "e",
+      "to": "c",
+      "annotation": ""
+    },
+    {
+      "from": "e",
+      "to": "e",
+      "annotation": ""
+    },
+    {
+      "from": "d",
+      "to": "a",
+      "annotation": ""
+    },
+    {
+      "from": "a",
+      "to": "d",
+      "annotation": ""
+    },
+    {
+      "from": "d",
+      "to": "c",
+      "annotation": ""
+    },
+    {
+      "from": "c",
+      "to": "d",
+      "annotation": ""
+    }
+  ]
+}

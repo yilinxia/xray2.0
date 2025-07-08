@@ -1,0 +1,82 @@
+{
+    "name": "meal_wine",
+    "arguments": [
+        {
+            "id": "Pasta",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "Fish",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "Meat",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "White",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "Red",
+            "annotation": "",
+            "url": ""
+        }
+    ],
+    "defeats": [
+        {
+            "from": "Fish",
+            "to": "Meat",
+            "annotation": ""
+        },
+        {
+            "from": "Meat",
+            "to": "Fish",
+            "annotation": ""
+        },
+        {
+            "from": "Fish",
+            "to": "Pasta",
+            "annotation": ""
+        },
+        {
+            "from": "Pasta",
+            "to": "Fish",
+            "annotation": ""
+        },
+        {
+            "from": "Pasta",
+            "to": "Meat",
+            "annotation": ""
+        },
+        {
+            "from": "Meat",
+            "to": "Pasta",
+            "annotation": ""
+        },
+        {
+            "from": "Pasta",
+            "to": "White",
+            "annotation": ""
+        },
+        {
+            "from": "Meat",
+            "to": "White",
+            "annotation": ""
+        },
+        {
+            "from": "White",
+            "to": "Red",
+            "annotation": ""
+        },
+        {
+            "from": "Red",
+            "to": "White",
+            "annotation": ""
+        }
+    ]
+}

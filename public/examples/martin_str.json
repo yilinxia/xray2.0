@@ -1,0 +1,142 @@
+{
+    "name": "martin_str",
+    "arguments": [
+        {
+            "id": "A",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "B",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "C",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "D",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "E",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "F",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "G",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "H",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "I",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "J",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "K",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "L",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "M",
+            "annotation": "",
+            "url": ""
+        },
+        {
+            "id": "N",
+            "annotation": "",
+            "url": ""
+        }
+    ],
+    "defeats": [
+        {
+            "from": "B",
+            "to": "A",
+            "annotation": ""
+        },
+        {
+            "from": "C",
+            "to": "B",
+            "annotation": ""
+        },
+        {
+            "from": "D",
+            "to": "C",
+            "annotation": ""
+        },
+        {
+            "from": "E",
+            "to": "D",
+            "annotation": ""
+        },
+        {
+            "from": "F",
+            "to": "E",
+            "annotation": ""
+        },
+        {
+            "from": "G",
+            "to": "F",
+            "annotation": ""
+        },
+        {
+            "from": "H",
+            "to": "B",
+            "annotation": ""
+        },
+        {
+            "from": "I",
+            "to": "H",
+            "annotation": ""
+        },
+        {
+            "from": "J",
+            "to": "I",
+            "annotation": ""
+        },
+        {
+            "from": "K",
+            "to": "H",
+            "annotation": ""
+        },
+        {
+            "from": "L",
+            "to": "K",
+            "annotation": ""
+        },
+        {
+            "from": "M",
+            "to": "H",
+            "annotation": ""
+        },
+        {
+            "from": "N",
+            "to": "M",
+            "annotation": ""
+        }
+    ]
+}
