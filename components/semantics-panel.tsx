@@ -5,7 +5,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { HelpCircle, X } from "lucide-react"
 import { computeSemantics } from "@/lib/argumentation"
@@ -384,16 +384,16 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <CardTitle>Evaluation</CardTitle>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-xs">
-                <p>Select semantics to evaluate the argumentation framework</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button>
+                <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="right" className="max-w-xs text-sm">
+              <p>Select semantics to evaluate the argumentation framework</p>
+            </PopoverContent>
+          </Popover>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

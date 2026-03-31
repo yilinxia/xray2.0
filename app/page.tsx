@@ -3,13 +3,14 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
-import { Upload, FileText, RefreshCw, Database, PlusCircle, Edit, Download, HelpCircle } from "lucide-react"
+import { Upload, FileText, RefreshCw, Database, PlusCircle, Edit, Download, HelpCircle, Github, FileText as PaperIcon } from "lucide-react"
 import { Icon } from '@iconify/react';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import ArgumentGraph from "@/components/argument-graph"
 import SemanticsPanel from "@/components/semantics-panel"
 import JsonEditor from "@/components/json-editor"
@@ -144,10 +145,53 @@ export default function ArgumentationFramework() {
     <div className="h-screen flex flex-col">
       {/* Header */}
       <div className="p-4 border-b">
-        <h1 className="text-2xl font-bold">Argumentation Framework Visualizer</h1>
-        <p className="text-muted-foreground">
-          Upload, generate, or select an example to visualize arguments and attack relationships
-        </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="AF-XRAY Logo" className="h-10" />
+            <div>
+              <h1 className="text-2xl font-bold">AF-XRAY</h1>
+              <p className="text-muted-foreground text-sm">
+                Argumentation Framework eXplanation, Reasoning, and AnalYsis
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href="https://github.com/yilinxia/xray2.0"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <Github className="h-5 w-5" />
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>View on GitHub</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href="https://dl.acm.org/doi/full/10.1145/3769126.3769246"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <Icon icon="mdi:file-document-outline" className="h-5 w-5" />
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Read the Paper</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
       </div>
 
       {/* Controls Bar */}
@@ -263,16 +307,16 @@ export default function ArgumentationFramework() {
               <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none">
                 <div className="flex items-center gap-2 pointer-events-auto">
                   <span className="text-2xl font-semibold text-gray-800 bg-white/70 px-2 py-1 rounded">Argument Graph</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help bg-white/70 rounded" />
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <p>Hover over nodes to see information and hyperlinks. Click on a node to visualize how its value is calculated. Right-click to edit node properties.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="bg-white/70 rounded p-0.5">
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="right" className="max-w-xs text-sm">
+                      <p>Hover over nodes to see information and hyperlinks. Click on a node to visualize how its value is calculated. Right-click to edit node properties.</p>
+                    </PopoverContent>
+                  </Popover>
                   {currentFrameworkLabel && (
                     <span className="text-sm font-semibold text-blue-700 bg-white/70 px-2 py-1 rounded">Current: {currentFrameworkLabel}</span>
                   )}

@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -15,8 +14,7 @@ export interface GraphvizConfig {
   acceptedColor: string
   rejectedColor: string
   undecidedColor: string
-  allowBackwardArrows: boolean
-  rankSameGroups: string[][]
+  showLengthLabels: boolean
 }
 
 interface GraphvizConfigProps {
@@ -34,33 +32,11 @@ export default function GraphvizConfig({
   onConfigChange,
   onDownloadGv,
 }: GraphvizConfigProps) {
-  const [rankSameInput, setRankSameInput] = useState("")
-
   const handleConfigChange = (key: keyof GraphvizConfig, value: any) => {
     onConfigChange({
       ...config,
       [key]: value,
     })
-  }
-
-  const addRankSameGroup = () => {
-    if (!rankSameInput.trim()) return
-
-    const nodes = rankSameInput
-      .split(",")
-      .map((node) => node.trim())
-      .filter((node) => framework.args.some((arg) => arg.id === node))
-
-    if (nodes.length > 1) {
-      handleConfigChange("rankSameGroups", [...config.rankSameGroups, nodes])
-      setRankSameInput("")
-    }
-  }
-
-  const removeRankSameGroup = (index: number) => {
-    const newGroups = [...config.rankSameGroups]
-    newGroups.splice(index, 1)
-    handleConfigChange("rankSameGroups", newGroups)
   }
 
   return (
@@ -70,7 +46,7 @@ export default function GraphvizConfig({
           <Settings className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96" side="bottom" align="start" sideOffset={5}>
+      <PopoverContent className="w-80" side="bottom" align="start" sideOffset={5}>
         <div className="space-y-4">
           <h3 className="font-medium">Graph Configuration</h3>
 
@@ -128,35 +104,11 @@ export default function GraphvizConfig({
 
           <div className="flex items-center space-x-2">
             <Switch
-              id="allowBackwardArrows"
-              checked={config.allowBackwardArrows}
-              onCheckedChange={(checked) => handleConfigChange("allowBackwardArrows", checked)}
+              id="showLengthLabels"
+              checked={config.showLengthLabels}
+              onCheckedChange={(checked) => handleConfigChange("showLengthLabels", checked)}
             />
-            <Label htmlFor="allowBackwardArrows">Allow Backward Arrows</Label>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Rank Same Groups</Label>
-            <div className="flex space-x-2">
-              <Input
-                placeholder="e.g., A, B, C"
-                value={rankSameInput}
-                onChange={(e) => setRankSameInput(e.target.value)}
-              />
-              <Button onClick={addRankSameGroup} type="button" size="sm">
-                Add
-              </Button>
-            </div>
-            <div className="space-y-1 mt-2">
-              {config.rankSameGroups.map((group, index) => (
-                <div key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
-                  <span className="text-sm">{group.join(", ")}</span>
-                  <Button variant="ghost" size="sm" onClick={() => removeRankSameGroup(index)} className="h-6 w-6 p-0">
-                    &times;
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <Label htmlFor="showLengthLabels">Show Length Labels</Label>
           </div>
 
           <Button onClick={onDownloadGv} className="w-full flex items-center justify-center">

@@ -49,7 +49,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const [selectedEdge, setSelectedEdge] = useState<Attack | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [semanticsResult, setSemanticResult] = useState<any>(null)
-  const [groundedResult, setGroundedResult] = useState<{ accepted: string[], rejected: string[], undecided: string[] } | null>(null)
+  const [groundedResult, setGroundedResult] = useState<any>(null)
   const [provenanceType, setProvenanceType] = useState<ProvenanceType>("actual")
 
   // Node editor state
@@ -66,8 +66,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     acceptedColor: "#40cfff", // Blue
     rejectedColor: "#ffb763", // Orange
     undecidedColor: "#fefe62", // Yellow
-    allowBackwardArrows: true,
-    rankSameGroups: [],
+    showLengthLabels: false,
   })
 
   // Provenance checkboxes state
@@ -389,7 +388,8 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const downloadGraphvizFile = () => {
     if (!framework || !semantics) return
 
-    const dot = generateGraphvizDot(framework, semantics, graphvizConfig)
+    // Pass semanticsResult for coloring and groundedResult for length labels
+    const dot = generateGraphvizDot(framework, semantics, graphvizConfig, semanticsResult || undefined, groundedResult || undefined)
     const blob = new Blob([dot], { type: "text/plain" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -401,14 +401,16 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     URL.revokeObjectURL(url)
   }
 
-  // Update Cytoscape node colors based on selected extension
+  // Update Cytoscape node colors and labels based on selected extension
   const updateNodeColors = () => {
     if (!cyRef.current) return
 
-    // If no semantics selected, show plain graph (remove all coloring)
+    // If no semantics selected, show plain graph (remove all coloring and reset labels)
     if (!semantics) {
       cyRef.current.nodes().forEach((node) => {
         node.removeClass("accepted rejected undecided undecided-light-blue undecided-light-orange")
+        // Reset label to just the node ID
+        node.data("label", node.id())
       })
       return
     }
@@ -429,6 +431,16 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
       // Remove existing classes
       node.removeClass("accepted rejected undecided undecided-light-blue undecided-light-orange")
+
+      // Get length from grounded provenance (length is always from grounded semantics)
+      let lengthLabel = ""
+      if (graphvizConfig.showLengthLabels && groundedResult?.provenance?.[nodeId]?.length !== undefined) {
+        const len = groundedResult.provenance[nodeId].length
+        lengthLabel = len === Infinity ? ".∞" : `.${len}`
+      }
+
+      // Update node label with length (if enabled)
+      node.data("label", `${nodeId}${lengthLabel}`)
 
       // For grounded semantics: use standard blue, orange, yellow
       // For other semantics: use lighter colors for nodes that were UNDEC in grounded
@@ -469,7 +481,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   // Apply colors when selected extension or semantics results change
   useEffect(() => {
     updateNodeColors()
-  }, [selectedExtension, semanticsResult, semantics, groundedResult])
+  }, [selectedExtension, semanticsResult, semantics, groundedResult, graphvizConfig.showLengthLabels])
 
   // Initialize and update the graph
   useEffect(() => {
@@ -481,13 +493,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         setSemanticResult(result)
       })
 
-      // Always compute grounded semantics for comparison (used for lighter colors)
+      // Always compute grounded semantics for comparison (used for lighter colors and length labels)
       computeSemantics(framework, "grounded").then((result) => {
-        setGroundedResult({
-          accepted: result.accepted,
-          rejected: result.rejected,
-          undecided: result.undecided
-        })
+        setGroundedResult(result)
       })
     } else {
       setSemanticResult(null)
@@ -508,7 +516,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               "background-color": "#ffffff",
               "border-color": "#000000",
               "border-width": 1,
-              label: "data(id)",
+              label: "data(label)",
               color: "#1f2937",
               "text-valign": "center",
               "text-halign": "center",
@@ -817,7 +825,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           id: arg.id,
           annotation: arg.annotation || `Argument ${arg.id}`,
           url: arg.url || "",
-          label: arg.annotation || arg.id,
+          label: arg.id,
           value: arg.value || null,
         },
       })
@@ -825,15 +833,6 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
     // Add edges (attacks)
     framework.attacks.forEach((attack) => {
-      // Skip backward arrows if not allowed by Graphviz config
-      if (!graphvizConfig.allowBackwardArrows) {
-        const fromIndex = framework.args.findIndex((arg) => arg.id === attack.from)
-        const toIndex = framework.args.findIndex((arg) => arg.id === attack.to)
-        if (fromIndex > toIndex) {
-          return
-        }
-      }
-
       cy.add({
         group: "edges",
         data: {
@@ -864,7 +863,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     return () => {
       // No need to destroy cytoscape instance, we'll reuse it
     }
-  }, [framework, semantics, currentLayout, graphvizConfig.allowBackwardArrows, isDrawingEdge])
+  }, [framework, semantics, currentLayout, isDrawingEdge])
 
   // Update node colors when graphviz config changes
   useEffect(() => {

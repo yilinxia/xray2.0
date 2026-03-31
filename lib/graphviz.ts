@@ -1,18 +1,21 @@
-import type { ArgumentFramework, Semantics } from "./types"
-import { computeSemantics } from "./argumentation"
+import type { ArgumentFramework, Semantics, SemanticsResult } from "./types"
 import type { GraphvizConfig } from "@/components/graphviz-config"
 
 /**
  * Generate Graphviz DOT language from an argumentation framework
+ * @param framework - The argumentation framework
+ * @param semantics - The selected semantics
+ * @param config - Graphviz configuration
+ * @param semanticsResult - Result for coloring nodes (current semantics)
+ * @param groundedResult - Result for length labels (always from grounded semantics)
  */
 export function generateGraphvizDot(
   framework: ArgumentFramework,
   semantics: Semantics,
   config: GraphvizConfig,
+  semanticsResult?: SemanticsResult,
+  groundedResult?: SemanticsResult,
 ): string {
-  // Compute semantics to determine node colors
-  const semanticsResult = computeSemantics(framework, semantics)
-
   // Start building the DOT file
   let dot = `digraph ArgumentationFramework {\n`
 
@@ -28,11 +31,13 @@ export function generateGraphvizDot(
     let color = config.undecidedColor
     let fontColor = "black"
 
-    // Determine node color based on semantics
-    if (semanticsResult.accepted.includes(arg.id)) {
-      color = config.acceptedColor
-    } else if (semanticsResult.rejected.includes(arg.id)) {
-      color = config.rejectedColor
+    // Determine node color based on semantics result if available
+    if (semanticsResult) {
+      if (semanticsResult.accepted.includes(arg.id)) {
+        color = config.acceptedColor
+      } else if (semanticsResult.rejected.includes(arg.id)) {
+        color = config.rejectedColor
+      }
     }
 
     // Calculate contrasting font color (simple version)
@@ -44,8 +49,15 @@ export function generateGraphvizDot(
       fontColor = "white"
     }
 
+    // Determine node label (with or without length from grounded semantics)
+    let nodeLabel = arg.id
+    if (config.showLengthLabels && groundedResult?.provenance?.[arg.id]?.length !== undefined) {
+      const len = groundedResult.provenance[arg.id].length
+      nodeLabel = len === Infinity ? `${arg.id}.∞` : `${arg.id}.${len}`
+    }
+
     // Add node with tooltip (annotation) and URL if available
-    const nodeAttrs = [`fillcolor="${color}"`, `fontcolor="${fontColor}"`]
+    const nodeAttrs = [`label="${nodeLabel}"`, `fillcolor="${color}"`, `fontcolor="${fontColor}"`]
 
     if (arg.annotation) {
       nodeAttrs.push(`tooltip="${arg.annotation.replace(/"/g, '\\"')}"`)
@@ -62,30 +74,12 @@ export function generateGraphvizDot(
 
   // Add edges
   framework.attacks.forEach((attack) => {
-    // Skip backward arrows if not allowed
-    if (!config.allowBackwardArrows) {
-      const fromIndex = framework.args.findIndex((arg) => arg.id === attack.from)
-      const toIndex = framework.args.findIndex((arg) => arg.id === attack.to)
-      if (fromIndex > toIndex) {
-        return
-      }
-    }
-
     const edgeAttrs = []
     if (attack.annotation) {
       edgeAttrs.push(`label="${attack.annotation.replace(/"/g, '\\"')}"`)
     }
 
     dot += `  "${attack.from}" -> "${attack.to}"${edgeAttrs.length ? ` [${edgeAttrs.join(", ")}]` : ""};\n`
-  })
-
-  dot += "\n"
-
-  // Add rank=same constraints
-  config.rankSameGroups.forEach((group) => {
-    if (group.length > 1) {
-      dot += `  { rank=same; ${group.map((id) => `"${id}"`).join("; ")}; }\n`
-    }
   })
 
   dot += "}\n"
