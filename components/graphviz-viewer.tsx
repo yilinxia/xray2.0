@@ -26,6 +26,7 @@ export interface GraphvizViewerRef {
   zoomOut: () => void
   fit: () => void
   snapshot: () => void
+  getNodePositions: () => Record<string, { x: number; y: number }>
 }
 
 const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
@@ -56,6 +57,70 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
     fit: () => {
       setScale(1)
       setPosition({ x: 0, y: 0 })
+    },
+    getNodePositions: () => {
+      const positions: Record<string, { x: number; y: number }> = {}
+      if (!svgContainerRef.current) return positions
+      
+      const svg = svgContainerRef.current.querySelector('svg')
+      if (!svg) return positions
+      
+      // Get the SVG's viewBox or dimensions for coordinate transformation
+      const svgRect = svg.getBoundingClientRect()
+      const viewBox = svg.getAttribute('viewBox')
+      let svgWidth = svgRect.width
+      let svgHeight = svgRect.height
+      let viewBoxMinX = 0
+      let viewBoxMinY = 0
+      let viewBoxWidth = svgWidth
+      let viewBoxHeight = svgHeight
+      
+      if (viewBox) {
+        const parts = viewBox.split(/\s+|,/).map(Number)
+        if (parts.length === 4) {
+          [viewBoxMinX, viewBoxMinY, viewBoxWidth, viewBoxHeight] = parts
+        }
+      }
+      
+      // Extract node positions from SVG
+      const nodes = svg.querySelectorAll('.node')
+      nodes.forEach((node) => {
+        const titleEl = node.querySelector('title')
+        if (!titleEl) return
+        
+        const nodeId = titleEl.textContent?.trim()
+        if (!nodeId) return
+        
+        // Get the ellipse or polygon element to find center
+        const ellipse = node.querySelector('ellipse')
+        const polygon = node.querySelector('polygon')
+        
+        let cx = 0, cy = 0
+        
+        if (ellipse) {
+          cx = parseFloat(ellipse.getAttribute('cx') || '0')
+          cy = parseFloat(ellipse.getAttribute('cy') || '0')
+        } else if (polygon) {
+          // For polygon, calculate center from points
+          const points = polygon.getAttribute('points')
+          if (points) {
+            const coords = points.trim().split(/\s+/).map(p => {
+              const [x, y] = p.split(',').map(Number)
+              return { x, y }
+            })
+            if (coords.length > 0) {
+              cx = coords.reduce((sum, c) => sum + c.x, 0) / coords.length
+              cy = coords.reduce((sum, c) => sum + c.y, 0) / coords.length
+            }
+          }
+        }
+        
+        // Transform from SVG coordinates to a normalized coordinate system
+        // Graphviz SVG has Y increasing downward, we need to account for that
+        positions[nodeId] = { x: cx, y: cy }
+      })
+      
+      return positions
     },
     snapshot: () => {
       if (!svgContent) return
@@ -111,14 +176,13 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       setError(null)
 
       try {
-        // Convert selectedExtension to SemanticsResult format for generateGraphvizDot
-        const extensionAsResult: SemanticsResult | undefined = selectedExtension ? {
+        // Convert selectedExtension to a partial SemanticsResult format for generateGraphvizDot
+        const extensionAsResult = selectedExtension ? {
           accepted: selectedExtension.accepted,
           rejected: selectedExtension.rejected,
           undecided: selectedExtension.undecided,
-          extensions: [selectedExtension],
           provenance: {},
-        } : undefined
+        } as SemanticsResult : undefined
 
         // Generate DOT string
         const dotString = generateGraphvizDot(

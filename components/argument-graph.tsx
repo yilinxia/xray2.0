@@ -1541,9 +1541,23 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     }
   }, [layoutDirection])
 
-  // Handle view mode change - resize and fit Cytoscape when switching to edit mode
+  // Handle view mode change - apply Graphviz positions when switching to edit mode
   useEffect(() => {
     if (viewMode === "edit" && cyRef.current) {
+      // Get positions from pending ref (captured before mode switch)
+      const positions = pendingPositionsRef.current
+      if (positions && Object.keys(positions).length > 0) {
+        // Apply positions to Cytoscape nodes
+        cyRef.current.nodes().forEach((node) => {
+          const nodeId = node.id()
+          const pos = positions[nodeId]
+          if (pos) {
+            node.position({ x: pos.x, y: pos.y })
+          }
+        })
+        // Clear pending positions
+        pendingPositionsRef.current = null
+      }
       // Resize Cytoscape to fit the container
       cyRef.current.resize()
       // Fit the graph to the viewport
@@ -1622,6 +1636,17 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Zoom handlers for GraphvizViewer (passed as ref)
   const graphvizViewerRef = useRef<GraphvizViewerRef | null>(null)
+  
+  // Store positions from Graphviz for use when switching to edit mode
+  const pendingPositionsRef = useRef<Record<string, { x: number; y: number }> | null>(null)
+
+  // Handler to switch to edit mode - captures positions first
+  const handleSwitchToEditMode = () => {
+    if (graphvizViewerRef.current) {
+      pendingPositionsRef.current = graphvizViewerRef.current.getNodePositions()
+    }
+    setViewMode("edit")
+  }
 
   const handleViewModeZoomIn = () => {
     if (viewMode === "view" && graphvizViewerRef.current) {
@@ -1746,7 +1771,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               variant={viewMode === "edit" ? "default" : "outline"}
               size="sm"
               className="h-8 w-8 p-0"
-              onClick={() => setViewMode("edit")}
+              onClick={handleSwitchToEditMode}
               title="Edit Mode"
             >
               <Pencil className="h-4 w-4" />
