@@ -68,10 +68,10 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
     getNodePositions: () => {
       const positions: Record<string, { x: number; y: number }> = {}
       if (!svgContainerRef.current) return positions
-      
+
       const svg = svgContainerRef.current.querySelector('svg')
       if (!svg) return positions
-      
+
       // Get the SVG's viewBox or dimensions for coordinate transformation
       const svgRect = svg.getBoundingClientRect()
       const viewBox = svg.getAttribute('viewBox')
@@ -81,29 +81,29 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       let viewBoxMinY = 0
       let viewBoxWidth = svgWidth
       let viewBoxHeight = svgHeight
-      
+
       if (viewBox) {
         const parts = viewBox.split(/\s+|,/).map(Number)
         if (parts.length === 4) {
           [viewBoxMinX, viewBoxMinY, viewBoxWidth, viewBoxHeight] = parts
         }
       }
-      
+
       // Extract node positions from SVG
       const nodes = svg.querySelectorAll('.node')
       nodes.forEach((node) => {
         const titleEl = node.querySelector('title')
         if (!titleEl) return
-        
+
         const nodeId = titleEl.textContent?.trim()
         if (!nodeId) return
-        
+
         // Get the ellipse or polygon element to find center
         const ellipse = node.querySelector('ellipse')
         const polygon = node.querySelector('polygon')
-        
+
         let cx = 0, cy = 0
-        
+
         if (ellipse) {
           cx = parseFloat(ellipse.getAttribute('cx') || '0')
           cy = parseFloat(ellipse.getAttribute('cy') || '0')
@@ -121,17 +121,17 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
             }
           }
         }
-        
+
         // Transform from SVG coordinates to a normalized coordinate system
         // Graphviz SVG has Y increasing downward, we need to account for that
         positions[nodeId] = { x: cx, y: cy }
       })
-      
+
       return positions
     },
     snapshot: () => {
       if (!svgContent) return
-      
+
       // Create a canvas to convert SVG to PNG
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
@@ -147,15 +147,15 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
         const scaleFactor = 2
         canvas.width = img.width * scaleFactor
         canvas.height = img.height * scaleFactor
-        
+
         // Fill with white background
         ctx.fillStyle = 'white'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
-        
+
         // Draw the image
         ctx.scale(scaleFactor, scaleFactor)
         ctx.drawImage(img, 0, 0)
-        
+
         // Convert to PNG and download
         canvas.toBlob((blob) => {
           if (!blob) return
@@ -168,7 +168,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
           document.body.removeChild(a)
           URL.revokeObjectURL(downloadUrl)
         }, 'image/png')
-        
+
         URL.revokeObjectURL(url)
       }
 
@@ -202,11 +202,11 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
 
         // Render to SVG using Graphviz WASM
         let svg = await renderGraphvizSvg(dotString)
-        
+
         // Modify SVG to be responsive - remove fixed width/height and add viewBox if not present
         // This allows the SVG to scale properly within its container
         svg = svg.replace(/<svg\s+/, '<svg style="max-width: 100%; max-height: 100%;" ')
-        
+
         setSvgContent(svg)
       } catch (err) {
         console.error("Error rendering Graphviz:", err)
@@ -255,11 +255,11 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   const handleSvgClick = useCallback((e: React.MouseEvent) => {
     // Only process clicks, not drags
     if (dragMoved) return
-    
+
     // Find if we clicked on a node
     let target = e.target as Element
     let nodeId: string | null = null
-    
+
     // Traverse up the DOM to find a node group (g.node)
     while (target && target !== e.currentTarget) {
       if (target.classList?.contains('node')) {
@@ -272,7 +272,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       }
       target = target.parentElement as Element
     }
-    
+
     if (onNodeClick) {
       if (nodeId) {
         // Toggle selection: if already selected, deselect
@@ -287,11 +287,11 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   // Handle right-click on SVG - show context menu for nodes
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
-    
+
     // Find if we right-clicked on a node
     let target = e.target as Element
     let nodeId: string | null = null
-    
+
     // Traverse up the DOM to find a node group (g.node)
     while (target && target !== e.currentTarget) {
       if (target.classList?.contains('node')) {
@@ -304,7 +304,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       }
       target = target.parentElement as Element
     }
-    
+
     if (nodeId && onNodeContextMenu) {
       onNodeContextMenu(nodeId, e.clientX, e.clientY)
     }
@@ -313,10 +313,10 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   // Add visual selection indicator to nodes
   useEffect(() => {
     if (!svgContainerRef.current) return
-    
+
     const svg = svgContainerRef.current.querySelector('svg')
     if (!svg) return
-    
+
     // Remove previous selection styling
     svg.querySelectorAll('.node').forEach((node) => {
       const ellipse = node.querySelector('ellipse')
@@ -328,7 +328,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
         shape.style.stroke = ''
       }
     })
-    
+
     // Apply selection styling to selected node
     if (selectedNode) {
       const nodes = svg.querySelectorAll('.node')
@@ -351,78 +351,79 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   // Apply provenance highlighting
   useEffect(() => {
     if (!svgContainerRef.current) return
-    
+
     const svg = svgContainerRef.current.querySelector('svg')
     if (!svg) return
-    
+
     // Reset all nodes - remove provenance styling and restore labels
     svg.querySelectorAll('.node').forEach((node) => {
-      ;(node as SVGElement).style.opacity = ''
+      ; (node as SVGElement).style.opacity = ''
       const ellipse = node.querySelector('ellipse')
       const polygon = node.querySelector('polygon')
       const shape = ellipse || polygon
       if (shape) {
         shape.removeAttribute('data-provenance')
         shape.removeAttribute('data-provenance-target')
-        ;(shape as SVGElement).style.fill = ''
-        ;(shape as SVGElement).style.strokeWidth = ''
-        ;(shape as SVGElement).style.stroke = ''
+          ; (shape as SVGElement).style.fill = ''
+          ; (shape as SVGElement).style.strokeWidth = ''
+          ; (shape as SVGElement).style.stroke = ''
       }
       // Restore text visibility and color
       const texts = node.querySelectorAll('text')
       texts.forEach(t => {
-        ;(t as SVGElement).style.display = ''
-        ;(t as SVGElement).style.fill = ''
+        ; (t as SVGElement).style.display = ''
+          ; (t as SVGElement).style.fill = ''
       })
     })
-    
+
     // Reset all edges - remove provenance styling and restore labels
     svg.querySelectorAll('.edge').forEach((edge) => {
-      ;(edge as SVGElement).style.opacity = ''
+      ; (edge as SVGElement).style.opacity = ''
       edge.removeAttribute('data-provenance')
       const paths = edge.querySelectorAll('path')
       const polygons = edge.querySelectorAll('polygon')
       paths.forEach(p => {
-        ;(p as SVGElement).style.stroke = ''
-        ;(p as SVGElement).style.strokeDasharray = ''
+        ; (p as SVGElement).style.stroke = ''
+          ; (p as SVGElement).style.strokeDasharray = ''
       })
       polygons.forEach(p => {
-        ;(p as SVGElement).style.stroke = ''
-        ;(p as SVGElement).style.fill = ''
+        ; (p as SVGElement).style.stroke = ''
+          ; (p as SVGElement).style.fill = ''
       })
       // Restore text visibility
       const texts = edge.querySelectorAll('text')
       texts.forEach(t => {
-        ;(t as SVGElement).style.display = ''
+        ; (t as SVGElement).style.display = ''
       })
     })
-    
+
     // If no provenance data, nothing more to do
     if (!provenanceData || !provenanceTargetNode) return
-    
+
     const provenanceNodeSet = new Set(provenanceData.nodes)
     const provenanceEdgeSet = new Set(
       provenanceData.edges.map(e => `${e.from}->${e.to}`)
     )
-    
+
     const isPotentialProvenance = provenanceType === "potential"
     const isActualProvenance = provenanceType === "actual"
     const isPrimaryProvenance = provenanceType === "primary"
-    
+
     // For potential and actual: strip length labels and hide edge labels
     const stripLabels = isPotentialProvenance || isActualProvenance
-    
+
     // Style all nodes
     svg.querySelectorAll('.node').forEach((node) => {
       const titleEl = node.querySelector('title')
       const nodeId = titleEl?.textContent?.trim()
-      
+
       const ellipse = node.querySelector('ellipse')
       const polygon = node.querySelector('polygon')
       const shape = ellipse || polygon
       const texts = node.querySelectorAll('text')
-      
+
       // For potential/actual provenance, strip length labels from ALL nodes
+      // For primary provenance, strip length labels only from non-provenance nodes
       if (stripLabels) {
         texts.forEach(t => {
           const textContent = t.textContent || ''
@@ -432,29 +433,38 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
             t.textContent = baseId
           }
         })
+      } else if (isPrimaryProvenance && nodeId && !provenanceNodeSet.has(nodeId)) {
+        // For primary provenance, strip labels from non-provenance nodes only
+        texts.forEach(t => {
+          const textContent = t.textContent || ''
+          if (textContent.includes('.')) {
+            const baseId = textContent.split('.')[0]
+            t.textContent = baseId
+          }
+        })
       }
-      
+
       if (isPotentialProvenance) {
         // Potential provenance styling - dark gray for provenance nodes
         if (nodeId && provenanceNodeSet.has(nodeId)) {
           if (shape) {
             shape.setAttribute('data-provenance', 'true')
-            ;(shape as SVGElement).style.fill = '#bebebe'
-            
+              ; (shape as SVGElement).style.fill = '#bebebe'
+
             // Target node gets thick border
             if (nodeId === provenanceTargetNode) {
               shape.setAttribute('data-provenance-target', 'true')
-              ;(shape as SVGElement).style.strokeWidth = '5'
+                ; (shape as SVGElement).style.strokeWidth = '5'
             }
           }
         } else {
           // Non-provenance node - white fill, gray border, gray text
           if (shape) {
-            ;(shape as SVGElement).style.fill = 'white'
-            ;(shape as SVGElement).style.stroke = '#cccccc'
+            ; (shape as SVGElement).style.fill = 'white'
+              ; (shape as SVGElement).style.stroke = '#cccccc'
           }
           texts.forEach(t => {
-            ;(t as SVGElement).style.fill = '#cccccc'
+            ; (t as SVGElement).style.fill = '#cccccc'
           })
         }
       } else if (isActualProvenance) {
@@ -463,11 +473,31 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
           // Target node gets thick border
           if (nodeId === provenanceTargetNode && shape) {
             shape.setAttribute('data-provenance-target', 'true')
-            ;(shape as SVGElement).style.strokeWidth = '5'
+              ; (shape as SVGElement).style.strokeWidth = '5'
           }
           // Keep original fill color
         } else {
           // Non-provenance node - white fill, gray border, gray text
+          if (shape) {
+            ; (shape as SVGElement).style.fill = 'white'
+              ; (shape as SVGElement).style.stroke = '#cccccc'
+          }
+          texts.forEach(t => {
+            ; (t as SVGElement).style.fill = '#cccccc'
+          })
+        }
+      } else if (isPrimaryProvenance) {
+        // Primary provenance styling - keep original colors for provenance nodes
+        // Non-provenance nodes same as actual: white fill, gray border, gray text
+        if (nodeId && provenanceNodeSet.has(nodeId)) {
+          // Target node gets thick border
+          if (nodeId === provenanceTargetNode && shape) {
+            shape.setAttribute('data-provenance-target', 'true')
+            ;(shape as SVGElement).style.strokeWidth = '5'
+          }
+          // Keep original fill color
+        } else {
+          // Non-provenance node - white fill, gray border, gray text (same as actual)
           if (shape) {
             ;(shape as SVGElement).style.fill = 'white'
             ;(shape as SVGElement).style.stroke = '#cccccc'
@@ -476,68 +506,62 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
             ;(t as SVGElement).style.fill = '#cccccc'
           })
         }
-      } else if (isPrimaryProvenance) {
-        // Primary provenance styling - keep original colors, just highlight target
-        if (nodeId === provenanceTargetNode && shape) {
-          shape.setAttribute('data-provenance-target', 'true')
-          ;(shape as SVGElement).style.strokeWidth = '5'
-        }
       }
     })
-    
+
     // Style all edges
     svg.querySelectorAll('.edge').forEach((edge) => {
       const titleEl = edge.querySelector('title')
       const edgeTitle = titleEl?.textContent?.trim()
-      
+
       if (edgeTitle) {
         const paths = edge.querySelectorAll('path')
         const polygons = edge.querySelectorAll('polygon')
         const texts = edge.querySelectorAll('text')
-        
+
         // For potential/actual provenance, hide ALL edge labels
         if (stripLabels) {
           texts.forEach(t => {
-            ;(t as SVGElement).style.display = 'none'
+            ; (t as SVGElement).style.display = 'none'
           })
         }
-        
+
         // Parse edge title to get source and target: "from->to"
         const edgeParts = edgeTitle.split('->')
         const edgeSource = edgeParts.length === 2 ? edgeParts[0] : null
         const edgeTarget = edgeParts.length === 2 ? edgeParts[1] : null
-        
+
         if (isPotentialProvenance) {
           // For potential provenance: edge is black only if BOTH nodes are in provenance
           const sourceInProvenance = edgeSource && provenanceNodeSet.has(edgeSource)
           const targetInProvenance = edgeTarget && provenanceNodeSet.has(edgeTarget)
-          
+
           if (sourceInProvenance && targetInProvenance) {
             // Both nodes are in provenance - edge is black
             paths.forEach(p => {
-              ;(p as SVGElement).style.stroke = '#000000'
-              ;(p as SVGElement).style.strokeDasharray = 'none'
+              ; (p as SVGElement).style.stroke = '#000000'
+                ; (p as SVGElement).style.strokeDasharray = 'none'
             })
             polygons.forEach(p => {
-              ;(p as SVGElement).style.stroke = '#000000'
-              ;(p as SVGElement).style.fill = '#000000'
+              ; (p as SVGElement).style.stroke = '#000000'
+                ; (p as SVGElement).style.fill = '#000000'
             })
           } else {
             // At least one node is NOT in provenance - edge is gray
             paths.forEach(p => {
-              ;(p as SVGElement).style.stroke = '#d3d3d3'
-              ;(p as SVGElement).style.strokeDasharray = 'none'
+              ; (p as SVGElement).style.stroke = '#d3d3d3'
+                ; (p as SVGElement).style.strokeDasharray = 'none'
             })
             polygons.forEach(p => {
-              ;(p as SVGElement).style.stroke = '#d3d3d3'
-              ;(p as SVGElement).style.fill = '#d3d3d3'
+              ; (p as SVGElement).style.stroke = '#d3d3d3'
+                ; (p as SVGElement).style.fill = '#d3d3d3'
             })
           }
         } else if (isActualProvenance) {
           // For actual provenance: keep original edge colors, gray out if either node not in provenance
           const sourceInProvenance = edgeSource && provenanceNodeSet.has(edgeSource)
           const targetInProvenance = edgeTarget && provenanceNodeSet.has(edgeTarget)
-          
+
           if (sourceInProvenance && targetInProvenance) {
             // Both nodes are in provenance - keep original edge color, remove dotted style
             paths.forEach(p => {
@@ -555,18 +579,42 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
             })
           }
         } else if (isPrimaryProvenance) {
-          // For primary: keep original edge colors, just gray out non-provenance edges
-          if (!provenanceEdgeSet.has(edgeTitle)) {
-            // Non-provenance edge - light gray
+          // For primary: keep original edge colors for provenance edges
+          // Non-provenance edges same as actual: gray, no labels
+          const sourceInProvenance = edgeSource && provenanceNodeSet.has(edgeSource)
+          const targetInProvenance = edgeTarget && provenanceNodeSet.has(edgeTarget)
+          
+          if (provenanceEdgeSet.has(edgeTitle)) {
+            // Provenance edge - keep original colors (winning=blue, delaying=orange, etc.)
+          } else if (sourceInProvenance && targetInProvenance) {
+            // Both nodes in provenance but edge not in provenance edge set - gray out
             paths.forEach(p => {
               ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.strokeDasharray = 'none'
             })
             polygons.forEach(p => {
               ;(p as SVGElement).style.stroke = '#d3d3d3'
               ;(p as SVGElement).style.fill = '#d3d3d3'
             })
+            // Hide label for non-provenance edges
+            texts.forEach(t => {
+              ;(t as SVGElement).style.display = 'none'
+            })
+          } else {
+            // At least one node is NOT in provenance - edge is gray, hide label
+            paths.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.strokeDasharray = 'none'
+            })
+            polygons.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.fill = '#d3d3d3'
+            })
+            // Hide label for non-provenance edges
+            texts.forEach(t => {
+              ;(t as SVGElement).style.display = 'none'
+            })
           }
-          // Provenance edges keep their original colors (winning=blue, delaying=orange, etc.)
         }
       }
     })

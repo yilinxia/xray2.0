@@ -55,7 +55,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const [semanticsResult, setSemanticResult] = useState<any>(null)
   const [groundedResult, setGroundedResult] = useState<any>(null)
   const [provenanceType, setProvenanceType] = useState<ProvenanceType>("actual")
-  
+
   // View mode: "view" for Graphviz SVG, "edit" for Cytoscape
   const [viewMode, setViewMode] = useState<"view" | "edit">("view")
 
@@ -89,7 +89,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Provenance radio state
   const [provenanceRadio, setProvenanceRadio] = useState<ProvenanceType | null>(null)
-  
+
   // Provenance data for view mode highlighting
   const [viewModeProvenanceData, setViewModeProvenanceData] = useState<ProvenanceResult | null>(null)
   const [viewModeProvenanceTarget, setViewModeProvenanceTarget] = useState<string | null>(null)
@@ -165,7 +165,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
     // Get node count to adjust spacing dynamically
     const nodeCount = cyRef.current.nodes().length
-    
+
     // Calculate dynamic spacing - much tighter to keep nodes large when fitted
     const getSpacingFactor = () => {
       if (nodeCount <= 5) return 0.6
@@ -257,10 +257,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     try {
       // Generate DOT string for layout (use a simple version without styling for layout calculation)
       const dotString = generateGraphvizDotForLayout()
-      
+
       // Get positions from Graphviz
       const layoutResult = await getGraphvizLayout(dotString)
-      
+
       // Apply positions to Cytoscape nodes
       cyRef.current.nodes().forEach((node) => {
         const nodeId = node.id()
@@ -272,7 +272,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
       // Fit the graph to the viewport
       cyRef.current.fit(undefined, 30)
-      
+
       if (onComplete) {
         onComplete()
       }
@@ -306,10 +306,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     // Add rank=same constraints if enabled and we have grounded result
     if (graphvizConfig.rankByLength && groundedResult?.provenance) {
       dot += "\n"
-      
+
       // Group nodes by their length (exclude ∞ nodes)
       const nodesByLength = new Map<number, string[]>()
-      
+
       framework.args.forEach((arg) => {
         const provenance = groundedResult.provenance[arg.id]
         if (provenance?.length !== undefined && provenance.length !== Infinity) {
@@ -540,7 +540,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       rejected: semanticsResult.rejected,
       undecided: semanticsResult.undecided
     } : null)
-    
+
     if (!extensionData) return
 
     const isGroundedSemantics = semantics === "grounded"
@@ -605,10 +605,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     // For grounded semantics, use pre-computed edges
     // For non-grounded semantics, compute edge types based on current extension
     const edgeInfoMap = new Map<string, { type: string; length: number | string }>()
-    
+
     // Get the current extension data
     const extensionData = selectedExtension || semanticsResult
-    
+
     if (semantics === "grounded" && groundedResult?.edges) {
       // For grounded semantics, use the pre-computed edges
       for (const edge of groundedResult.edges) {
@@ -620,7 +620,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       const acceptedSet = new Set(extensionData.accepted)
       const rejectedSet = new Set(extensionData.rejected)
       const undecidedSet = new Set(extensionData.undecided)
-      
+
       // Build grounded edge info map for comparison
       const groundedEdgeMap = new Map<string, { type: string; length: number | string }>()
       if (groundedResult?.edges) {
@@ -628,7 +628,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           groundedEdgeMap.set(`${edge.from}-${edge.to}`, { type: edge.type, length: edge.length })
         }
       }
-      
+
       for (const attack of framework.attacks) {
         const fromAccepted = acceptedSet.has(attack.from)
         const fromRejected = rejectedSet.has(attack.from)
@@ -686,10 +686,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           const lengthStr = edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length)
           edge.data("label", lengthStr)
         }
-        
+
         // Add edge type class for coloring and styling
         edge.addClass(`edge-${edgeInfo.type}`)
-        
+
         // Set label color based on edge type (matching reference colors)
         const colorMap: Record<string, string> = {
           winning: "#1c72d4",   // blue
@@ -1404,11 +1404,11 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const handleViewModeContextProvenance = useCallback(async (type: ProvenanceType) => {
     const nodeId = viewModeContextMenu.nodeId
     if (!nodeId) return
-    
+
     setSelectedNode(nodeId)
     setProvenanceRadio(type)
     setViewModeContextMenu((c) => ({ ...c, open: false }))
-    
+
     // Compute provenance using clingo
     setIsComputingProvenance(true)
     try {
@@ -1488,7 +1488,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       // Update the framework with propagated values
       onFrameworkChange(propagatedFramework);
     }
-    
+
     setContextMenu((c) => ({ ...c, open: false }));
   };
 
@@ -1659,7 +1659,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Zoom handlers for GraphvizViewer (passed as ref)
   const graphvizViewerRef = useRef<GraphvizViewerRef | null>(null)
-  
+
   // Store positions from Graphviz for use when switching to edit mode
   const pendingPositionsRef = useRef<Record<string, { x: number; y: number }> | null>(null)
 
@@ -1706,8 +1706,8 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       graphvizViewerRef.current.snapshot()
     } else if (viewMode === "edit" && cyRef.current) {
       // For Cytoscape view, use built-in PNG export
-      const png = cyRef.current.png({ 
-        output: 'blob', 
+      const png = cyRef.current.png({
+        output: 'blob',
         bg: 'white',
         scale: 2,
         full: true
@@ -1754,9 +1754,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         )}
 
         {/* Edit Mode: Cytoscape container - always rendered but hidden when in view mode */}
-        <div 
-          ref={containerRef} 
-          className="absolute inset-0" 
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
           style={{ display: viewMode === "edit" ? "block" : "none" }}
         />
 
@@ -1802,7 +1802,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               </>
             )}
           </div>
-          
+
           {/* Edit mode column */}
           <div className="flex flex-col gap-1 items-center">
             <Button
@@ -1903,6 +1903,35 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
                   <span className="text-sm">Not in provenance</span>
                 </div>
               </>
+            ) : viewMode === "view" && provenanceRadio === "primary" && viewModeProvenanceData ? (
+              <>
+                <div className="text-xs font-semibold text-gray-600 mb-1">Primary Provenance</div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
+                  <span className="text-sm">IN (accepted)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
+                  <span className="text-sm">OUT (rejected)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
+                  <span className="text-sm">Undecided</span>
+                </div>
+                <div className="border-t border-gray-200 my-1"></div>
+                <div className="flex items-center">
+                  <div className="w-4 h-1 mr-2" style={{ backgroundColor: "#1c72d4" }}></div>
+                  <span className="text-sm">Winning edge</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-1 mr-2" style={{ backgroundColor: "#cc8400" }}></div>
+                  <span className="text-sm">Delaying edge</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-1 mr-2" style={{ backgroundColor: "#f1dd4b" }}></div>
+                  <span className="text-sm">Drawing edge</span>
+                </div>
+              </>
             ) : (
               <>
                 <div className="flex items-center">
@@ -1937,195 +1966,195 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         {/* Edit mode specific UI elements */}
         {viewMode === "edit" && (
           <>
-        {contextMenu.open && (
-          <div
-            className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
-            style={{
-              left: contextMenu.x,
-              top: contextMenu.y,
-            }}
-            data-context-menu="node"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="py-1">
-              <div className="relative group">
-                <button
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center justify-between"
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  Show Provenance
-                  <span className="text-gray-400">▶</span>
-                </button>
-                <div className="absolute left-full top-0 ml-1 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[180px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+            {contextMenu.open && (
+              <div
+                className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
+                style={{
+                  left: contextMenu.x,
+                  top: contextMenu.y,
+                }}
+                data-context-menu="node"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="py-1">
+                  <div className="relative group">
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center justify-between"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      Show Provenance
+                      <span className="text-gray-400">▶</span>
+                    </button>
+                    <div className="absolute left-full top-0 ml-1 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[180px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("potential"); }}
+                      >
+                        Potential Provenance
+                      </button>
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("actual"); }}
+                      >
+                        Actual Provenance
+                      </button>
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("primary"); }}
+                      >
+                        Primary Provenance
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-100 my-1"></div>
+                  <div className="relative group">
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center justify-between"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      Change Value
+                      <span className="text-gray-400">▶</span>
+                    </button>
+                    <div className="absolute left-full top-0 ml-1 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[180px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => { e.stopPropagation(); handleContextChangeValue("accepted"); }}
+                      >
+                        Accepted
+                      </button>
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => { e.stopPropagation(); handleContextChangeValue("defeated"); }}
+                      >
+                        Defeated
+                      </button>
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                        onMouseDown={(e) => { e.stopPropagation(); handleContextChangeValue("undecided"); }}
+                      >
+                        Undecided
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-100 my-1"></div>
                   <button
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("potential"); }}
+                    onMouseDown={(e) => { e.stopPropagation(); handleContextEdit(); }}
                   >
-                    Potential Provenance
+                    Edit Node
                   </button>
+                  <div className="border-t border-gray-100 my-1"></div>
                   <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("actual"); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
+                    onMouseDown={(e) => { e.stopPropagation(); handleContextDelete(); }}
                   >
-                    Actual Provenance
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("primary"); }}
-                  >
-                    Primary Provenance
+                    Delete Node
                   </button>
                 </div>
               </div>
-              <div className="border-t border-gray-100 my-1"></div>
-              <div className="relative group">
-                <button
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center justify-between"
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  Change Value
-                  <span className="text-gray-400">▶</span>
-                </button>
-                <div className="absolute left-full top-0 ml-1 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[180px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+            )}
+
+            {/* Edge context menu */}
+            {edgeContextMenu.open && (
+              <div
+                className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
+                style={{
+                  left: edgeContextMenu.x,
+                  top: edgeContextMenu.y,
+                }}
+                data-context-menu="edge"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="py-1">
                   <button
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextChangeValue("accepted"); }}
+                    onMouseDown={(e) => { e.stopPropagation(); handleEdgeContextEdit(); }}
                   >
-                    Accepted
+                    Edit Edge
                   </button>
+                  <div className="border-t border-gray-100 my-1"></div>
                   <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextChangeValue("defeated"); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
+                    onMouseDown={(e) => { e.stopPropagation(); handleEdgeContextDelete(); }}
                   >
-                    Defeated
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextChangeValue("undecided"); }}
-                  >
-                    Undecided
+                    Delete Edge
                   </button>
                 </div>
               </div>
-              <div className="border-t border-gray-100 my-1"></div>
-              <button
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                onMouseDown={(e) => { e.stopPropagation(); handleContextEdit(); }}
-              >
-                Edit Node
-              </button>
-              <div className="border-t border-gray-100 my-1"></div>
-              <button
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
-                onMouseDown={(e) => { e.stopPropagation(); handleContextDelete(); }}
-              >
-                Delete Node
-              </button>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Edge context menu */}
-        {edgeContextMenu.open && (
-          <div
-            className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
-            style={{
-              left: edgeContextMenu.x,
-              top: edgeContextMenu.y,
-            }}
-            data-context-menu="edge"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="py-1">
-              <button
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                onMouseDown={(e) => { e.stopPropagation(); handleEdgeContextEdit(); }}
+            {/* Canvas context menu */}
+            {canvasContextMenu.open && (
+              <div
+                className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
+                style={{
+                  left: canvasContextMenu.x,
+                  top: canvasContextMenu.y,
+                }}
+                data-context-menu="canvas"
+                onMouseDown={(e) => e.stopPropagation()}
               >
-                Edit Edge
-              </button>
-              <div className="border-t border-gray-100 my-1"></div>
-              <button
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-red-600"
-                onMouseDown={(e) => { e.stopPropagation(); handleEdgeContextDelete(); }}
-              >
-                Delete Edge
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Canvas context menu */}
-        {canvasContextMenu.open && (
-          <div
-            className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
-            style={{
-              left: canvasContextMenu.x,
-              top: canvasContextMenu.y,
-            }}
-            data-context-menu="canvas"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="py-1">
-              <button
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                onMouseDown={(e) => { e.stopPropagation(); handleAddNewNode(); }}
-              >
-                Add New Node
-              </button>
-              <div className="border-t border-gray-100 my-1"></div>
-              <button
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                onMouseDown={(e) => { e.stopPropagation(); handleStartEdgeDrawing(); }}
-              >
-                Draw Edge
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Edge preview */}
-        {previewEdge && cyRef.current && (
-          (() => {
-            const sourceNode = cyRef.current.getElementById(previewEdge.from)
-            if (sourceNode.length === 0) return null
-
-            const sourcePos = sourceNode.renderedPosition()
-            return (
-              <svg
-                className="absolute inset-0 pointer-events-none z-10"
-                style={{ width: '100%', height: '100%' }}
-              >
-                <defs>
-                  <marker
-                    id="preview-arrowhead"
-                    markerWidth="10"
-                    markerHeight="7"
-                    refX="9"
-                    refY="3.5"
-                    orient="auto"
+                <div className="py-1">
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleAddNewNode(); }}
                   >
-                    <polygon
-                      points="0 0, 10 3.5, 0 7"
-                      fill="#3b82f6"
+                    Add New Node
+                  </button>
+                  <div className="border-t border-gray-100 my-1"></div>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleStartEdgeDrawing(); }}
+                  >
+                    Draw Edge
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Edge preview */}
+            {previewEdge && cyRef.current && (
+              (() => {
+                const sourceNode = cyRef.current.getElementById(previewEdge.from)
+                if (sourceNode.length === 0) return null
+
+                const sourcePos = sourceNode.renderedPosition()
+                return (
+                  <svg
+                    className="absolute inset-0 pointer-events-none z-10"
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    <defs>
+                      <marker
+                        id="preview-arrowhead"
+                        markerWidth="10"
+                        markerHeight="7"
+                        refX="9"
+                        refY="3.5"
+                        orient="auto"
+                      >
+                        <polygon
+                          points="0 0, 10 3.5, 0 7"
+                          fill="#3b82f6"
+                          opacity="0.7"
+                        />
+                      </marker>
+                    </defs>
+                    <line
+                      x1={sourcePos.x}
+                      y1={sourcePos.y}
+                      x2={previewEdge.to.x}
+                      y2={previewEdge.to.y}
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                      strokeDasharray="5,5"
                       opacity="0.7"
+                      markerEnd="url(#preview-arrowhead)"
                     />
-                  </marker>
-                </defs>
-                <line
-                  x1={sourcePos.x}
-                  y1={sourcePos.y}
-                  x2={previewEdge.to.x}
-                  y2={previewEdge.to.y}
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  strokeDasharray="5,5"
-                  opacity="0.7"
-                  markerEnd="url(#preview-arrowhead)"
-                />
-              </svg>
-            )
-          })()
-        )}
+                  </svg>
+                )
+              })()
+            )}
           </>
         )}
 
