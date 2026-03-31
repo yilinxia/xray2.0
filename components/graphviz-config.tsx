@@ -21,7 +21,7 @@ export interface GraphvizConfig {
 
 interface GraphvizConfigProps {
   framework: ArgumentFramework
-  semantics: Semantics
+  semantics: Semantics | null
   config: GraphvizConfig
   onConfigChange: (config: GraphvizConfig) => void
   onDownloadGv: () => void

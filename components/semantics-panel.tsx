@@ -6,15 +6,16 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { HelpCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { HelpCircle, X } from "lucide-react"
 import { computeSemantics } from "@/lib/argumentation"
 import type { ArgumentFramework, Semantics, SemanticsResult, Extension } from "@/lib/types"
 import { useEffect, useState, useRef } from "react"
 
 interface SemanticsPanelProps {
   framework: ArgumentFramework | null
-  selectedSemantics: Semantics
-  onSemanticsChange: (semantics: Semantics) => void
+  selectedSemantics: Semantics | null
+  onSemanticsChange: (semantics: Semantics | null) => void
   onExtensionSelect?: (extension: string[], rejected: string[], undecided: string[]) => void
 }
 
@@ -54,9 +55,14 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
 
   // Compute semantics results when framework or semantics changes
   useEffect(() => {
-    if (!framework) {
+    if (!framework || !selectedSemantics) {
       setSemanticsResult(null)
       setIsComputing(false)
+      setSelectedExtensionValue(null)
+      // Clear extension selection when semantics is cleared
+      if (!selectedSemantics && onExtensionSelect) {
+        onExtensionSelect([], [], [])
+      }
       return
     }
 
@@ -72,10 +78,34 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
           setSemanticsResult(result)
           setIsComputing(false)
           
-          // Auto-select the first extension
+          // Auto-select the first extension based on semantics type
           if (selectedSemantics === "grounded") {
             const value = createExtensionValue(result.accepted, result.undecided, result.rejected)
             setSelectedExtensionValue(value)
+          } else if (selectedSemantics === "stable") {
+            // Select first stable extension if available
+            if (result.extensions && result.extensions.length > 0) {
+              const ext = result.extensions[0]
+              const rejected = computeRejectedFromExtension(framework, ext.members)
+              const undecided = computeUndecidedFromExtension(framework, ext.members, rejected)
+              const value = createExtensionValue(ext.members, undecided, rejected)
+              setSelectedExtensionValue(value)
+            }
+          } else if (selectedSemantics === "preferred") {
+            // Select first stable extension, or first preferred non-stable if no stable
+            if (result.stableExtensions && result.stableExtensions.length > 0) {
+              const ext = result.stableExtensions[0]
+              const rejected = computeRejectedFromExtension(framework, ext.members)
+              const undecided = computeUndecidedFromExtension(framework, ext.members, rejected)
+              const value = createExtensionValue(ext.members, undecided, rejected)
+              setSelectedExtensionValue(value)
+            } else if (result.preferredNonStableExtensions && result.preferredNonStableExtensions.length > 0) {
+              const ext = result.preferredNonStableExtensions[0]
+              const rejected = computeRejectedFromExtension(framework, ext.members)
+              const undecided = computeUndecidedFromExtension(framework, ext.members, rejected)
+              const value = createExtensionValue(ext.members, undecided, rejected)
+              setSelectedExtensionValue(value)
+            }
           } else if (selectedSemantics === "complete" && result.groundedExtension) {
             const rejected = computeRejectedFromExtension(framework, result.groundedExtension)
             const undecided = computeUndecidedFromExtension(framework, result.groundedExtension, rejected)
@@ -368,52 +398,72 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Semantics Selection */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           <Label className="font-bold whitespace-nowrap">Semantics</Label>
           <select
-            value={selectedSemantics}
-            onChange={(e) => onSemanticsChange(e.target.value as Semantics)}
+            value={selectedSemantics || ""}
+            onChange={(e) => onSemanticsChange(e.target.value ? e.target.value as Semantics : null)}
             className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
+            <option value="">-- Select --</option>
             {semanticsOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Show Labels Filter */}
-        <div className="flex items-center gap-4">
-          <Label className="font-bold whitespace-nowrap">Show labels</Label>
-          <div className="flex gap-4">
-            {(["IN", "UNDEC", "OUT"] as LabelFilter[]).map((filter) => (
-              <div key={filter} className="flex items-center gap-1">
-                <Checkbox
-                  id={`filter-${filter}`}
-                  checked={labelFilters.includes(filter)}
-                  onCheckedChange={() => toggleLabelFilter(filter)}
-                />
-                <Label htmlFor={`filter-${filter}`} className="text-sm cursor-pointer">
-                  {filter}
-                </Label>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Results */}
-        <div className="space-y-4">
-          {!framework ? (
-            <p className="text-sm text-muted-foreground">Load a framework to see evaluation results</p>
-          ) : isComputing ? (
-            <p className="text-sm text-muted-foreground">Computing semantics...</p>
-          ) : (
-            renderResults()
+          {selectedSemantics && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0"
+              onClick={() => onSemanticsChange(null)}
+              title="Clear semantics"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           )}
         </div>
+
+        {selectedSemantics && (
+          <>
+            {/* Show Labels Filter */}
+            <div className="flex items-center gap-4">
+              <Label className="font-bold whitespace-nowrap">Show labels</Label>
+              <div className="flex gap-4">
+                {(["IN", "UNDEC", "OUT"] as LabelFilter[]).map((filter) => (
+                  <div key={filter} className="flex items-center gap-1">
+                    <Checkbox
+                      id={`filter-${filter}`}
+                      checked={labelFilters.includes(filter)}
+                      onCheckedChange={() => toggleLabelFilter(filter)}
+                    />
+                    <Label htmlFor={`filter-${filter}`} className="text-sm cursor-pointer">
+                      {filter}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Results */}
+            <div className="space-y-4">
+              {!framework ? (
+                <p className="text-sm text-muted-foreground">Load a framework to see evaluation results</p>
+              ) : isComputing ? (
+                <p className="text-sm text-muted-foreground">Computing semantics...</p>
+              ) : (
+                renderResults()
+              )}
+            </div>
+          </>
+        )}
+
+        {!selectedSemantics && framework && (
+          <p className="text-sm text-muted-foreground">Select a semantics to evaluate the framework</p>
+        )}
       </CardContent>
     </Card>
   )

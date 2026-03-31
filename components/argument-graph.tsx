@@ -31,7 +31,7 @@ export const layoutOptions = [
 interface ArgumentGraphProps {
   framework: ArgumentFramework
   initialFramework: ArgumentFramework | null
-  semantics: Semantics
+  semantics: Semantics | null
   onFrameworkChange: (framework: ArgumentFramework) => void
   selectedExtension?: {
     accepted: string[]
@@ -387,7 +387,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Download graph as Graphviz .gv file
   const downloadGraphvizFile = () => {
-    if (!framework) return
+    if (!framework || !semantics) return
 
     const dot = generateGraphvizDot(framework, semantics, graphvizConfig)
     const blob = new Blob([dot], { type: "text/plain" })
@@ -404,6 +404,14 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   // Update Cytoscape node colors based on selected extension
   const updateNodeColors = () => {
     if (!cyRef.current) return
+
+    // If no semantics selected, show plain graph (remove all coloring)
+    if (!semantics) {
+      cyRef.current.nodes().forEach((node) => {
+        node.removeClass("accepted rejected undecided undecided-light-blue undecided-light-orange")
+      })
+      return
+    }
 
     // Use selectedExtension if provided, otherwise fall back to semanticsResult
     const extensionData = selectedExtension || (semanticsResult ? {
@@ -467,19 +475,24 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   useEffect(() => {
     if (!containerRef.current || !framework) return
 
-    // Compute semantics result (now async)
-    computeSemantics(framework, semantics).then((result) => {
-      setSemanticResult(result)
-    })
-
-    // Always compute grounded semantics for comparison (used for lighter colors)
-    computeSemantics(framework, "grounded").then((result) => {
-      setGroundedResult({
-        accepted: result.accepted,
-        rejected: result.rejected,
-        undecided: result.undecided
+    // Compute semantics result (now async) - only if semantics is selected
+    if (semantics) {
+      computeSemantics(framework, semantics).then((result) => {
+        setSemanticResult(result)
       })
-    })
+
+      // Always compute grounded semantics for comparison (used for lighter colors)
+      computeSemantics(framework, "grounded").then((result) => {
+        setGroundedResult({
+          accepted: result.accepted,
+          rejected: result.rejected,
+          undecided: result.undecided
+        })
+      })
+    } else {
+      setSemanticResult(null)
+      setGroundedResult(null)
+    }
 
     // Create the graph if it doesn't exist
     if (!cyRef.current) {
@@ -499,9 +512,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               color: "#1f2937",
               "text-valign": "center",
               "text-halign": "center",
-              "font-size": "22px",
-              width: 100,
-              height: 100,
+              "font-size": "18px",
+              width: 70,
+              height: 70,
               shape: "ellipse",
             },
           },
@@ -1118,30 +1131,33 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     onFrameworkChange(newFramework);
 
     // Recompute semantics with the updated framework and propagate changes
-    const updatedResult = await computeSemantics(newFramework, semantics);
-    setSemanticResult(updatedResult);
+    if (semantics) {
+      const updatedResult = await computeSemantics(newFramework, semantics);
+      setSemanticResult(updatedResult);
 
-    // Only propagate values to nodes that already have manual values set
-    const propagatedFramework: ArgumentFramework = {
-      ...newFramework,
-      args: newFramework.args.map((arg) => {
-        // If this node has a manual value, update it based on new semantics
-        if (arg.value) {
-          if (updatedResult.accepted.includes(arg.id)) {
-            return { ...arg, value: "accepted" };
-          } else if (updatedResult.rejected.includes(arg.id)) {
-            return { ...arg, value: "defeated" };
-          } else {
-            return { ...arg, value: "undecided" };
+      // Only propagate values to nodes that already have manual values set
+      const propagatedFramework: ArgumentFramework = {
+        ...newFramework,
+        args: newFramework.args.map((arg) => {
+          // If this node has a manual value, update it based on new semantics
+          if (arg.value) {
+            if (updatedResult.accepted.includes(arg.id)) {
+              return { ...arg, value: "accepted" };
+            } else if (updatedResult.rejected.includes(arg.id)) {
+              return { ...arg, value: "defeated" };
+            } else {
+              return { ...arg, value: "undecided" };
+            }
           }
-        }
-        // If no manual value, keep it as is (no value set)
-        return arg;
-      }),
-    };
+          // If no manual value, keep it as is (no value set)
+          return arg;
+        }),
+      };
 
-    // Update the framework with propagated values
-    onFrameworkChange(propagatedFramework);
+      // Update the framework with propagated values
+      onFrameworkChange(propagatedFramework);
+    }
+    
     setContextMenu((c) => ({ ...c, open: false }));
   };
 
@@ -1481,8 +1497,8 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           })()
         )}
 
-        {/* Top left controls */}
-        <div className="absolute top-4 left-4 z-20 flex flex-col gap-1">
+        {/* Top right controls */}
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-1">
           <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleZoomIn}>
             <ZoomIn className="h-4 w-4" />
           </Button>
@@ -1505,9 +1521,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         </div>
       </div>
 
-      <div ref={containerRef} className="flex-1 w-full" />
+      <div ref={containerRef} className="flex-1 w-full" style={{ marginTop: '4px' }} />
 
-      {framework && (
+      {framework && semantics && (
         <div className="absolute bottom-4 right-4 z-10 bg-white/90 rounded-md shadow-md p-3 flex flex-col gap-2 border">
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
@@ -1521,7 +1537,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
             <span className="text-sm">Undecided (UNDEC)</span>
           </div>
-          {semantics !== "grounded" && (
+          {semantics && semantics !== "grounded" && (
             <>
               <div className="flex items-center">
                 <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>

@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Upload, FileText, RefreshCw, Database, PlusCircle, Edit, Download, HelpCircle } from "lucide-react"
 import { Icon } from '@iconify/react';
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -20,7 +20,7 @@ import type { ArgumentFramework, Semantics, ExampleFramework } from "@/lib/types
 export default function ArgumentationFramework() {
   const [framework, setFramework] = useState<ArgumentFramework | null>(null)
   const [initialFramework, setInitialFramework] = useState<ArgumentFramework | null>(null)
-  const [selectedSemantics, setSelectedSemantics] = useState<Semantics>("grounded")
+  const [selectedSemantics, setSelectedSemantics] = useState<Semantics | null>("grounded")
   const [selectedExample, setSelectedExample] = useState<string>("")
   const [isJsonEditorOpen, setIsJsonEditorOpen] = useState(false)
   const [exampleFrameworks, setExampleFrameworks] = useState<ExampleFramework[]>([])
@@ -241,26 +241,8 @@ export default function ArgumentationFramework() {
         </div>
 
         <div className="md:col-span-3">
-          <Card className="h-full flex flex-col">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <CardTitle>Argument Graph</CardTitle>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs">
-                      <p>Hover over nodes to see information and hyperlinks. Click on a node to visualize how its value is calculated. Right-click to edit node properties.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              {currentFrameworkLabel && (
-                <div className="mt-2 text-sm font-semibold text-blue-700">Current: {currentFrameworkLabel}</div>
-              )}
-            </CardHeader>
-            <CardContent className="flex-1 p-0">
+          <Card className="h-full flex flex-col relative">
+            <CardContent className="flex-1 p-0 relative">
               {framework ? (
                 <ArgumentGraph
                   framework={framework}
@@ -277,6 +259,25 @@ export default function ArgumentationFramework() {
                   </div>
                 </div>
               )}
+              {/* Overlay header with transparent background */}
+              <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none">
+                <div className="flex items-center gap-2 pointer-events-auto">
+                  <span className="text-2xl font-semibold text-gray-800 bg-white/70 px-2 py-1 rounded">Argument Graph</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help bg-white/70 rounded" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p>Hover over nodes to see information and hyperlinks. Click on a node to visualize how its value is calculated. Right-click to edit node properties.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {currentFrameworkLabel && (
+                    <span className="text-sm font-semibold text-blue-700 bg-white/70 px-2 py-1 rounded">Current: {currentFrameworkLabel}</span>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
