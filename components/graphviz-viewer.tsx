@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef, forwardRef, useImperativeHandle } from "react"
+import { useEffect, useState, useRef, forwardRef, useImperativeHandle, useCallback } from "react"
 import { renderGraphvizSvg } from "@/lib/graphviz-layout"
 import { generateGraphvizDot } from "@/lib/graphviz"
 import type { ArgumentFramework, Semantics, SemanticsResult } from "@/lib/types"
@@ -16,6 +16,9 @@ interface GraphvizViewerProps {
   } | null
   groundedResult: SemanticsResult | null
   config: GraphvizConfig
+  selectedNode?: string | null
+  onNodeClick?: (nodeId: string | null) => void
+  onNodeContextMenu?: (nodeId: string, x: number, y: number) => void
 }
 
 export interface GraphvizViewerRef {
@@ -31,15 +34,20 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   selectedExtension,
   groundedResult,
   config,
+  selectedNode,
+  onNodeClick,
+  onNodeContextMenu,
 }, ref) => {
   const [svgContent, setSvgContent] = useState<string>("")
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const svgContainerRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [dragMoved, setDragMoved] = useState(false)
 
   // Expose zoom methods via ref
   useImperativeHandle(ref, () => ({
@@ -151,6 +159,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) {
       setIsDragging(true)
+      setDragMoved(false)
       setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y })
     }
   }
@@ -158,6 +167,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   // Handle mouse move for pan
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
+      setDragMoved(true)
       setPosition({
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y,
@@ -169,6 +179,103 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   const handleMouseUp = () => {
     setIsDragging(false)
   }
+
+  // Handle click on SVG - detect node clicks
+  const handleSvgClick = useCallback((e: React.MouseEvent) => {
+    // Only process clicks, not drags
+    if (dragMoved) return
+    
+    // Find if we clicked on a node
+    let target = e.target as Element
+    let nodeId: string | null = null
+    
+    // Traverse up the DOM to find a node group (g.node)
+    while (target && target !== e.currentTarget) {
+      if (target.classList?.contains('node')) {
+        // Found a node group - extract the node ID from the title element
+        const titleEl = target.querySelector('title')
+        if (titleEl) {
+          nodeId = titleEl.textContent?.trim() || null
+        }
+        break
+      }
+      target = target.parentElement as Element
+    }
+    
+    if (onNodeClick) {
+      if (nodeId) {
+        // Toggle selection: if already selected, deselect
+        onNodeClick(selectedNode === nodeId ? null : nodeId)
+      } else {
+        // Clicked on background - deselect
+        onNodeClick(null)
+      }
+    }
+  }, [dragMoved, onNodeClick, selectedNode])
+
+  // Handle right-click on SVG - show context menu for nodes
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    
+    // Find if we right-clicked on a node
+    let target = e.target as Element
+    let nodeId: string | null = null
+    
+    // Traverse up the DOM to find a node group (g.node)
+    while (target && target !== e.currentTarget) {
+      if (target.classList?.contains('node')) {
+        // Found a node group - extract the node ID from the title element
+        const titleEl = target.querySelector('title')
+        if (titleEl) {
+          nodeId = titleEl.textContent?.trim() || null
+        }
+        break
+      }
+      target = target.parentElement as Element
+    }
+    
+    if (nodeId && onNodeContextMenu) {
+      onNodeContextMenu(nodeId, e.clientX, e.clientY)
+    }
+  }, [onNodeContextMenu])
+
+  // Add visual selection indicator to nodes
+  useEffect(() => {
+    if (!svgContainerRef.current) return
+    
+    const svg = svgContainerRef.current.querySelector('svg')
+    if (!svg) return
+    
+    // Remove previous selection styling
+    svg.querySelectorAll('.node').forEach((node) => {
+      const ellipse = node.querySelector('ellipse')
+      const polygon = node.querySelector('polygon')
+      const shape = ellipse || polygon
+      if (shape) {
+        shape.removeAttribute('data-selected')
+        shape.style.strokeWidth = ''
+        shape.style.stroke = ''
+      }
+    })
+    
+    // Apply selection styling to selected node
+    if (selectedNode) {
+      const nodes = svg.querySelectorAll('.node')
+      nodes.forEach((node) => {
+        const titleEl = node.querySelector('title')
+        if (titleEl && titleEl.textContent?.trim() === selectedNode) {
+          const ellipse = node.querySelector('ellipse')
+          const polygon = node.querySelector('polygon')
+          const shape = ellipse || polygon
+          if (shape) {
+            shape.setAttribute('data-selected', 'true')
+            shape.style.strokeWidth = '3'
+            shape.style.stroke = '#3b82f6'
+          }
+        }
+      })
+    }
+  }, [svgContent, selectedNode])
 
   if (isLoading) {
     return (
@@ -195,8 +302,11 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onClick={handleSvgClick}
+      onContextMenu={handleContextMenu}
     >
       <div
+        ref={svgContainerRef}
         className="absolute inset-0 flex items-center justify-center"
         style={{
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
@@ -204,6 +314,15 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
         }}
         dangerouslySetInnerHTML={{ __html: svgContent }}
       />
+      <style jsx global>{`
+        .node {
+          cursor: pointer;
+        }
+        .node:hover ellipse,
+        .node:hover polygon {
+          filter: brightness(0.95);
+        }
+      `}</style>
     </div>
   )
 })

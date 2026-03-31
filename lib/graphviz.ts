@@ -1,4 +1,4 @@
-import type { ArgumentFramework, Semantics, SemanticsResult, EdgeInfo } from "./types"
+import type { ArgumentFramework, Semantics, SemanticsResult, EdgeInfo, EdgeType } from "./types"
 import type { GraphvizConfig } from "@/components/graphviz-config"
 
 /**
@@ -185,8 +185,69 @@ export function generateGraphvizDot(
   dot += `edge[labeldistance=1.5 fontsize=12 fontname="helvetica"]\n`
 
   // Build edge info map for quick lookup
+  // For non-grounded semantics, compute edge types based on current extension
   const edgeInfoMap = new Map<string, EdgeInfo>()
-  if (groundedResult?.edges) {
+  
+  if (semantics === "grounded" && groundedResult?.edges) {
+    // For grounded semantics, use the pre-computed edges
+    for (const edge of groundedResult.edges) {
+      edgeInfoMap.set(`${edge.from}->${edge.to}`, edge)
+    }
+  } else if (semanticsResult && semantics !== "grounded") {
+    // For non-grounded semantics, compute edge types based on current extension
+    // Keep labels from grounded for edges that remain the same type, especially drawing (∞)
+    const acceptedSet = new Set(semanticsResult.accepted)
+    const rejectedSet = new Set(semanticsResult.rejected)
+    const undecidedSet = new Set(semanticsResult.undecided)
+    
+    // Build grounded edge info map for comparison
+    const groundedEdgeMap = new Map<string, EdgeInfo>()
+    if (groundedResult?.edges) {
+      for (const edge of groundedResult.edges) {
+        groundedEdgeMap.set(`${edge.from}->${edge.to}`, edge)
+      }
+    }
+    
+    for (const attack of framework.attacks) {
+      const fromAccepted = acceptedSet.has(attack.from)
+      const fromRejected = rejectedSet.has(attack.from)
+      const fromUndecided = undecidedSet.has(attack.from)
+      const toAccepted = acceptedSet.has(attack.to)
+      const toRejected = rejectedSet.has(attack.to)
+      const toUndecided = undecidedSet.has(attack.to)
+
+      let edgeType: EdgeType
+      let length: number | string = ""  // Empty by default
+
+      // Determine edge type based on the classification
+      if (fromAccepted && toRejected) {
+        edgeType = "winning"
+      } else if (fromRejected && toAccepted) {
+        edgeType = "delaying"
+      } else if (fromUndecided && toUndecided) {
+        edgeType = "drawing"
+        // For drawing edges (undec -> undec), keep the ∞ label
+        length = "∞"
+      } else {
+        edgeType = "blunder"
+      }
+
+      // Check if edge type changed from grounded - if drawing changed to something else, clear label
+      const groundedEdge = groundedEdgeMap.get(`${attack.from}->${attack.to}`)
+      if (groundedEdge && groundedEdge.type === edgeType) {
+        // Edge type is the same as grounded, keep the original label
+        length = groundedEdge.length
+      }
+
+      edgeInfoMap.set(`${attack.from}->${attack.to}`, {
+        from: attack.from,
+        to: attack.to,
+        type: edgeType,
+        length,
+      })
+    }
+  } else if (groundedResult?.edges) {
+    // Fallback to grounded edges if available
     for (const edge of groundedResult.edges) {
       edgeInfoMap.set(`${edge.from}->${edge.to}`, edge)
     }

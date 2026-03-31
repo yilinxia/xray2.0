@@ -72,11 +72,11 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     acceptedColor: "#40cfff", // Blue
     rejectedColor: "#ffb763", // Orange
     undecidedColor: "#fefe62", // Yellow
-    showLengthLabels: false,
-    showEdgeLabels: false,
-    useEdgeDirection: false,
+    showLengthLabels: true,
+    showEdgeLabels: true,
+    useEdgeDirection: true,
     nodeSize: 70,
-    rankByLength: false,
+    rankByLength: true,
   })
 
   // Provenance checkboxes state
@@ -111,6 +111,14 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     x: number
     y: number
   }>({ open: false, x: 0, y: 0 })
+
+  // View mode context menu state (for provenance only)
+  const [viewModeContextMenu, setViewModeContextMenu] = useState<{
+    open: boolean
+    x: number
+    y: number
+    nodeId: string | null
+  }>({ open: false, x: 0, y: 0, nodeId: null })
 
   // Edge drawing state
   const [isDrawingEdge, setIsDrawingEdge] = useState(false)
@@ -583,13 +591,73 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     })
   }
 
-  // Update Cytoscape edge labels and colors based on grounded result
+  // Update Cytoscape edge labels and colors based on semantics result
   const updateEdgeLabels = () => {
     if (!cyRef.current) return
 
-    // Build edge info map from grounded result
+    // Build edge info map
+    // For grounded semantics, use pre-computed edges
+    // For non-grounded semantics, compute edge types based on current extension
     const edgeInfoMap = new Map<string, { type: string; length: number | string }>()
-    if (groundedResult?.edges) {
+    
+    // Get the current extension data
+    const extensionData = selectedExtension || semanticsResult
+    
+    if (semantics === "grounded" && groundedResult?.edges) {
+      // For grounded semantics, use the pre-computed edges
+      for (const edge of groundedResult.edges) {
+        edgeInfoMap.set(`${edge.from}-${edge.to}`, { type: edge.type, length: edge.length })
+      }
+    } else if (extensionData && semantics && semantics !== "grounded") {
+      // For non-grounded semantics, compute edge types based on current extension
+      // Keep labels from grounded for edges that remain the same type, especially drawing (∞)
+      const acceptedSet = new Set(extensionData.accepted)
+      const rejectedSet = new Set(extensionData.rejected)
+      const undecidedSet = new Set(extensionData.undecided)
+      
+      // Build grounded edge info map for comparison
+      const groundedEdgeMap = new Map<string, { type: string; length: number | string }>()
+      if (groundedResult?.edges) {
+        for (const edge of groundedResult.edges) {
+          groundedEdgeMap.set(`${edge.from}-${edge.to}`, { type: edge.type, length: edge.length })
+        }
+      }
+      
+      for (const attack of framework.attacks) {
+        const fromAccepted = acceptedSet.has(attack.from)
+        const fromRejected = rejectedSet.has(attack.from)
+        const fromUndecided = undecidedSet.has(attack.from)
+        const toAccepted = acceptedSet.has(attack.to)
+        const toRejected = rejectedSet.has(attack.to)
+        const toUndecided = undecidedSet.has(attack.to)
+
+        let edgeType: string
+        let length: number | string = ""  // Empty by default
+
+        // Determine edge type based on the classification
+        if (fromAccepted && toRejected) {
+          edgeType = "winning"
+        } else if (fromRejected && toAccepted) {
+          edgeType = "delaying"
+        } else if (fromUndecided && toUndecided) {
+          edgeType = "drawing"
+          // For drawing edges (undec -> undec), keep the ∞ label
+          length = "∞"
+        } else {
+          edgeType = "blunder"
+        }
+
+        // Check if edge type changed from grounded - if same type, keep the original label
+        const groundedEdge = groundedEdgeMap.get(`${attack.from}-${attack.to}`)
+        if (groundedEdge && groundedEdge.type === edgeType) {
+          // Edge type is the same as grounded, keep the original label
+          length = groundedEdge.length
+        }
+
+        edgeInfoMap.set(`${attack.from}-${attack.to}`, { type: edgeType, length })
+      }
+    } else if (groundedResult?.edges) {
+      // Fallback to grounded edges if available
       for (const edge of groundedResult.edges) {
         edgeInfoMap.set(`${edge.from}-${edge.to}`, { type: edge.type, length: edge.length })
       }
@@ -605,8 +673,8 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       edge.removeClass("edge-winning edge-delaying edge-drawing edge-blunder")
 
       if (graphvizConfig.showEdgeLabels && edgeInfo) {
-        // For blunder edges, no label; for others, show the length
-        if (edgeInfo.type === "blunder") {
+        // For blunder edges or empty length, no label; for others, show the length
+        if (edgeInfo.type === "blunder" || edgeInfo.length === "" || edgeInfo.length === 0) {
           edge.data("label", "")
         } else {
           const lengthStr = edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length)
@@ -1272,15 +1340,18 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       if (canvasContextMenu.open) {
         setCanvasContextMenu(c => ({ ...c, open: false }))
       }
+      if (viewModeContextMenu.open) {
+        setViewModeContextMenu(c => ({ ...c, open: false }))
+      }
     }
 
-    if (contextMenu.open || edgeContextMenu.open || canvasContextMenu.open) {
+    if (contextMenu.open || edgeContextMenu.open || canvasContextMenu.open || viewModeContextMenu.open) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }
-  }, [contextMenu.open, edgeContextMenu.open, canvasContextMenu.open])
+  }, [contextMenu.open, edgeContextMenu.open, canvasContextMenu.open, viewModeContextMenu.open])
 
   // Close context menu on any mouse interaction with the graph container
   useEffect(() => {
@@ -1321,6 +1392,24 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     setSelectedNode(contextMenu.nodeId)
     setProvenanceRadio(type)
     setContextMenu((c) => ({ ...c, open: false }))
+  }
+
+  // View mode context menu actions
+  const handleViewModeContextProvenance = (type: ProvenanceType) => {
+    setSelectedNode(viewModeContextMenu.nodeId)
+    setProvenanceRadio(type)
+    setViewModeContextMenu((c) => ({ ...c, open: false }))
+  }
+
+  // Handler for GraphvizViewer right-click
+  const handleGraphvizNodeContextMenu = (nodeId: string, x: number, y: number) => {
+    setSelectedNode(nodeId)
+    setViewModeContextMenu({
+      open: true,
+      x,
+      y,
+      nodeId,
+    })
   }
   const handleContextEdit = () => {
     if (contextMenu.nodeId) handleNodeEdit(contextMenu.nodeId)
@@ -1595,6 +1684,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             selectedExtension={selectedExtension}
             groundedResult={groundedResult}
             config={graphvizConfig}
+            selectedNode={selectedNode}
+            onNodeClick={setSelectedNode}
+            onNodeContextMenu={handleGraphvizNodeContextMenu}
           />
         )}
 
@@ -1717,11 +1809,11 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           <div className="absolute bottom-4 right-4 z-10 bg-white/90 rounded-md shadow-md p-3 flex flex-col gap-2 border">
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
-              <span className="text-sm">Accepted (IN)</span>
+              <span className="text-sm">IN (skeptical)</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
-              <span className="text-sm">Rejected (OUT)</span>
+              <span className="text-sm">OUT (skeptical)</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
@@ -1731,11 +1823,11 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               <>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>
-                  <span className="text-sm">IN (was UNDEC in grounded)</span>
+                  <span className="text-sm">IN (credulous)</span>
                 </div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffe6c9" }}></div>
-                  <span className="text-sm">OUT (was UNDEC in grounded)</span>
+                  <span className="text-sm">OUT (credulous)</span>
                 </div>
               </>
             )}
@@ -1935,6 +2027,51 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           })()
         )}
           </>
+        )}
+
+        {/* View mode context menu (provenance only) */}
+        {viewMode === "view" && viewModeContextMenu.open && (
+          <div
+            className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
+            style={{
+              left: viewModeContextMenu.x,
+              top: viewModeContextMenu.y,
+            }}
+            data-context-menu="view-node"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="py-1">
+              <div className="relative group">
+                <button
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center justify-between"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  Show Provenance
+                  <span className="text-gray-400">▶</span>
+                </button>
+                <div className="absolute left-full top-0 ml-1 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[180px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleViewModeContextProvenance("potential"); }}
+                  >
+                    Potential Provenance
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleViewModeContextProvenance("primary"); }}
+                  >
+                    Primary Provenance
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleViewModeContextProvenance("actual"); }}
+                  >
+                    Actual Provenance
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

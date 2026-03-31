@@ -265,6 +265,82 @@ function extractLengthResults(result: ClingoResult | ClingoError, idMapping?: Ma
 }
 
 /**
+ * Compute edge types based on an extension's classification
+ * This is used for non-grounded semantics where we need to recalculate edge types
+ * based on the current extension's accepted/rejected/undecided sets
+ */
+function computeEdgeTypesForExtension(
+  framework: ArgumentFramework,
+  accepted: string[],
+  rejected: string[],
+  undecided: string[],
+  groundedResult?: SemanticsResult
+): EdgeInfo[] {
+  const edges: EdgeInfo[] = []
+  const acceptedSet = new Set(accepted)
+  const rejectedSet = new Set(rejected)
+  const undecidedSet = new Set(undecided)
+
+  // Get length information from grounded result if available
+  const nodeLengths = new Map<string, number | string>()
+  if (groundedResult?.provenance) {
+    for (const [nodeId, prov] of Object.entries(groundedResult.provenance)) {
+      if (prov.length !== undefined) {
+        nodeLengths.set(nodeId, prov.length)
+      }
+    }
+  }
+
+  for (const attack of framework.attacks) {
+    const fromAccepted = acceptedSet.has(attack.from)
+    const fromRejected = rejectedSet.has(attack.from)
+    const fromUndecided = undecidedSet.has(attack.from)
+    const toAccepted = acceptedSet.has(attack.to)
+    const toRejected = rejectedSet.has(attack.to)
+    const toUndecided = undecidedSet.has(attack.to)
+
+    let edgeType: EdgeType
+    let length: number | string = 0
+
+    // Determine edge type based on the classification
+    if (fromAccepted && toRejected) {
+      // Winning (blue): Accepted node attacking Rejected/Defeated node
+      edgeType = "winning"
+      const fromLen = nodeLengths.get(attack.from)
+      length = fromLen !== undefined ? (fromLen === "∞" ? "∞" : (fromLen as number) + 1) : 1
+    } else if (fromRejected && toAccepted) {
+      // Delaying (orange): Rejected/Defeated node attacking Accepted node
+      edgeType = "delaying"
+      const fromLen = nodeLengths.get(attack.from)
+      length = fromLen !== undefined ? (fromLen === "∞" ? "∞" : (fromLen as number) + 1) : 1
+    } else if (fromUndecided && toUndecided) {
+      // Drawing (yellow): Undecided node attacking Undecided node
+      edgeType = "drawing"
+      length = "∞"
+    } else {
+      // Blunder (gray): All other cases
+      // - Undecided attacking Rejected
+      // - Rejected attacking Undecided
+      // - Rejected attacking Rejected
+      // - Accepted attacking Accepted (conflict - shouldn't happen in valid extension)
+      // - Accepted attacking Undecided
+      // - Undecided attacking Accepted
+      edgeType = "blunder"
+      length = 0
+    }
+
+    edges.push({
+      from: attack.from,
+      to: attack.to,
+      type: edgeType,
+      length,
+    })
+  }
+
+  return edges
+}
+
+/**
  * Compute semantics using clingo-wasm
  */
 export async function computeSemanticsWithClingo(
