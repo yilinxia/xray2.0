@@ -1,0 +1,46 @@
+node(X) :- move(X,_).
+node(X) :- move(_,X).
+
+%calculate the length and color of the node
+#const state_max = 100. 
+win_o(S, X) :- move(X,Y), not win_u(S,Y), next(S,_). 
+win_u(S1,X) :- move(X,Y), not win_o(S,Y), next(S,S1).
+fg(S1,X) :- next(S,S1), not win_u(S,X), win_u(S1,X).
+fr(0,X)  :- node(X), not win_o(0,X). 
+fr(S1,X) :- next(S,S1), not final(S), win_o(S,X), not win_o(S1,X). next(0,1). 
+next(S,S1) :- fg(S,X), S1 = S+1, S < state_max.
+final(S) :- next(S,S1), not next(S1,_). 
+length("lost",X,L)   :- fr(S,X), L = 2*S.   
+length("won",X,L)    :- fg(S,X), L = 2*S-1. 
+length("draw",X,"∞") :- node(X), not length("lost",X,_), not length("won",X,_).
+
+%calculate the edge length and color in G
+edge(winning,X,Y,B)    :- move(X,Y), length("won",X,_) , length("lost",Y,L) , B=L+1.
+edge(drawing,X,Y,B)    :- move(X,Y), length("draw",X,_), length("draw",Y,_), B="∞".
+edge(delaying,X,Y,B)   :- move(X,Y), length("lost",X,_) ,length("won",Y,L), B=L+1 .
+edge(blunder,X,Y,"") :- move(X,Y), length("won",X,_), length("draw",Y,_).
+edge(blunder,X,Y,"") :- move(X,Y), length("draw",X,_), length("won",Y,_).
+edge(blunder,X,Y,"") :- move(X,Y), length("won",X,_), length("won",Y,_). 
+
+
+% potential prov
+pot_prov(X,Y) :- start(X), move(X,Y).
+pot_prov(X,Y) :- pot_prov(_,X), move(X,Y).
+
+
+%actual prov
+act_cand(X,Y) :- pot_prov(X,Y), not edge(blunder,X,Y,_).
+act_prov(X,Y) :- start(X), act_cand(X,Y).
+act_prov(X,Y) :- act_prov(_,X), act_cand(X,Y).
+
+
+%primary prov
+min_winning_edge(X,Y) :- edge(winning, X, Y, M), M= #min {B : edge(winning, X, _, B) }.
+non_min_winning_move(X,Y):- edge(winning,X,Y,_), not min_winning_edge(X,Y).
+pr_cand(X,Y) :- act_prov(X,Y), not non_min_winning_move(X,Y).
+pr_prov(X,Y) :- start(X), pr_cand(X,Y).
+pr_prov(X,Y) :- pr_prov(_,X), pr_cand(X,Y).
+
+#show pot_prov/2.
+#show act_prov/2.
+#show pr_prov/2.

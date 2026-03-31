@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useState } from "react"
+import { useRef, useEffect, useState, useCallback } from "react"
 import cytoscape from "cytoscape"
 import cytoscapeDagre from "cytoscape-dagre"
 cytoscape.use(cytoscapeDagre);
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { computeSemantics } from "@/lib/argumentation"
 import { generateGraphvizDot } from "@/lib/graphviz"
 import { getGraphvizLayout } from "@/lib/graphviz-layout"
+import { computeProvenance, type ProvenanceResult } from "@/lib/clingo-semantics"
 import NodeEditor from "./node-editor"
 import EdgeEditor from "./edge-editor"
 import GraphvizConfig, { type GraphvizConfig as GraphvizConfigType } from "./graphviz-config"
@@ -88,6 +89,11 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Provenance radio state
   const [provenanceRadio, setProvenanceRadio] = useState<ProvenanceType | null>(null)
+  
+  // Provenance data for view mode highlighting
+  const [viewModeProvenanceData, setViewModeProvenanceData] = useState<ProvenanceResult | null>(null)
+  const [viewModeProvenanceTarget, setViewModeProvenanceTarget] = useState<string | null>(null)
+  const [isComputingProvenance, setIsComputingProvenance] = useState(false)
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -1394,12 +1400,29 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     setContextMenu((c) => ({ ...c, open: false }))
   }
 
-  // View mode context menu actions
-  const handleViewModeContextProvenance = (type: ProvenanceType) => {
-    setSelectedNode(viewModeContextMenu.nodeId)
+  // View mode context menu actions - compute provenance using clingo
+  const handleViewModeContextProvenance = useCallback(async (type: ProvenanceType) => {
+    const nodeId = viewModeContextMenu.nodeId
+    if (!nodeId) return
+    
+    setSelectedNode(nodeId)
     setProvenanceRadio(type)
     setViewModeContextMenu((c) => ({ ...c, open: false }))
-  }
+    
+    // Compute provenance using clingo
+    setIsComputingProvenance(true)
+    try {
+      const result = await computeProvenance(framework, nodeId, type)
+      setViewModeProvenanceData(result)
+      setViewModeProvenanceTarget(nodeId)
+    } catch (error) {
+      console.error("Error computing provenance:", error)
+      setViewModeProvenanceData(null)
+      setViewModeProvenanceTarget(null)
+    } finally {
+      setIsComputingProvenance(false)
+    }
+  }, [framework, viewModeContextMenu.nodeId])
 
   // Handler for GraphvizViewer right-click
   const handleGraphvizNodeContextMenu = (nodeId: string, x: number, y: number) => {
@@ -1645,6 +1668,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     if (graphvizViewerRef.current) {
       pendingPositionsRef.current = graphvizViewerRef.current.getNodePositions()
     }
+    // Clear provenance highlighting when switching modes
+    setViewModeProvenanceData(null)
+    setViewModeProvenanceTarget(null)
+    setProvenanceRadio(null)
     setViewMode("edit")
   }
 
@@ -1710,8 +1737,19 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             groundedResult={groundedResult}
             config={graphvizConfig}
             selectedNode={selectedNode}
-            onNodeClick={setSelectedNode}
+            onNodeClick={(nodeId) => {
+              setSelectedNode(nodeId)
+              if (!nodeId) {
+                // Clicked on background - clear provenance
+                setViewModeProvenanceData(null)
+                setViewModeProvenanceTarget(null)
+                setProvenanceRadio(null)
+              }
+            }}
             onNodeContextMenu={handleGraphvizNodeContextMenu}
+            provenanceData={viewModeProvenanceData}
+            provenanceTargetNode={viewModeProvenanceTarget}
+            provenanceType={provenanceRadio}
           />
         )}
 
@@ -1832,28 +1870,45 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         {/* Legend - same position for both modes */}
         {framework && semantics && (
           <div className="absolute bottom-4 right-4 z-10 bg-white/90 rounded-md shadow-md p-3 flex flex-col gap-2 border">
-            <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
-              <span className="text-sm">IN (skeptical)</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
-              <span className="text-sm">OUT (skeptical)</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
-              <span className="text-sm">Undecided (UNDEC)</span>
-            </div>
-            {semantics && semantics !== "grounded" && (
+            {/* Provenance legend for potential provenance */}
+            {viewMode === "view" && provenanceRadio === "potential" && viewModeProvenanceData ? (
+              <>
+                <div className="text-xs font-semibold text-gray-600 mb-1">Provenance Legend</div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2 border border-gray-400" style={{ backgroundColor: "#bebebe" }}></div>
+                  <span className="text-sm">Can reach target</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2 border border-gray-400" style={{ backgroundColor: "white" }}></div>
+                  <span className="text-sm">Cannot reach target</span>
+                </div>
+              </>
+            ) : (
               <>
                 <div className="flex items-center">
-                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>
-                  <span className="text-sm">IN (credulous)</span>
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
+                  <span className="text-sm">IN (skeptical)</span>
                 </div>
                 <div className="flex items-center">
-                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffe6c9" }}></div>
-                  <span className="text-sm">OUT (credulous)</span>
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
+                  <span className="text-sm">OUT (skeptical)</span>
                 </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
+                  <span className="text-sm">Undecided (UNDEC)</span>
+                </div>
+                {semantics && semantics !== "grounded" && (
+                  <>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>
+                      <span className="text-sm">IN (credulous)</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffe6c9" }}></div>
+                      <span className="text-sm">OUT (credulous)</span>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>

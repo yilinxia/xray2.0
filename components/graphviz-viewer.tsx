@@ -5,6 +5,7 @@ import { renderGraphvizSvg } from "@/lib/graphviz-layout"
 import { generateGraphvizDot } from "@/lib/graphviz"
 import type { ArgumentFramework, Semantics, SemanticsResult } from "@/lib/types"
 import type { GraphvizConfig } from "./graphviz-config"
+import type { ProvenanceResult } from "@/lib/clingo-semantics"
 
 interface GraphvizViewerProps {
   framework: ArgumentFramework
@@ -19,6 +20,9 @@ interface GraphvizViewerProps {
   selectedNode?: string | null
   onNodeClick?: (nodeId: string | null) => void
   onNodeContextMenu?: (nodeId: string, x: number, y: number) => void
+  provenanceData?: ProvenanceResult | null
+  provenanceTargetNode?: string | null
+  provenanceType?: "potential" | "actual" | "primary" | null
 }
 
 export interface GraphvizViewerRef {
@@ -38,6 +42,9 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   selectedNode,
   onNodeClick,
   onNodeContextMenu,
+  provenanceData,
+  provenanceTargetNode,
+  provenanceType,
 }, ref) => {
   const [svgContent, setSvgContent] = useState<string>("")
   const [isLoading, setIsLoading] = useState(true)
@@ -340,6 +347,186 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       })
     }
   }, [svgContent, selectedNode])
+
+  // Apply provenance highlighting
+  useEffect(() => {
+    if (!svgContainerRef.current) return
+    
+    const svg = svgContainerRef.current.querySelector('svg')
+    if (!svg) return
+    
+    // Reset all nodes - remove provenance styling and restore labels
+    svg.querySelectorAll('.node').forEach((node) => {
+      ;(node as SVGElement).style.opacity = ''
+      const ellipse = node.querySelector('ellipse')
+      const polygon = node.querySelector('polygon')
+      const shape = ellipse || polygon
+      if (shape) {
+        shape.removeAttribute('data-provenance')
+        shape.removeAttribute('data-provenance-target')
+        ;(shape as SVGElement).style.fill = ''
+        ;(shape as SVGElement).style.strokeWidth = ''
+        ;(shape as SVGElement).style.stroke = ''
+      }
+      // Restore text visibility and color
+      const texts = node.querySelectorAll('text')
+      texts.forEach(t => {
+        ;(t as SVGElement).style.display = ''
+        ;(t as SVGElement).style.fill = ''
+      })
+    })
+    
+    // Reset all edges - remove provenance styling and restore labels
+    svg.querySelectorAll('.edge').forEach((edge) => {
+      ;(edge as SVGElement).style.opacity = ''
+      edge.removeAttribute('data-provenance')
+      const paths = edge.querySelectorAll('path')
+      const polygons = edge.querySelectorAll('polygon')
+      paths.forEach(p => {
+        ;(p as SVGElement).style.stroke = ''
+        ;(p as SVGElement).style.strokeDasharray = ''
+      })
+      polygons.forEach(p => {
+        ;(p as SVGElement).style.stroke = ''
+        ;(p as SVGElement).style.fill = ''
+      })
+      // Restore text visibility
+      const texts = edge.querySelectorAll('text')
+      texts.forEach(t => {
+        ;(t as SVGElement).style.display = ''
+      })
+    })
+    
+    // If no provenance data, nothing more to do
+    if (!provenanceData || !provenanceTargetNode) return
+    
+    const provenanceNodeSet = new Set(provenanceData.nodes)
+    const provenanceEdgeSet = new Set(
+      provenanceData.edges.map(e => `${e.from}->${e.to}`)
+    )
+    
+    const isPotentialProvenance = provenanceType === "potential"
+    
+    // Style all nodes
+    svg.querySelectorAll('.node').forEach((node) => {
+      const titleEl = node.querySelector('title')
+      const nodeId = titleEl?.textContent?.trim()
+      
+      const ellipse = node.querySelector('ellipse')
+      const polygon = node.querySelector('polygon')
+      const shape = ellipse || polygon
+      const texts = node.querySelectorAll('text')
+      
+      // For potential provenance, strip length labels from ALL nodes
+      if (isPotentialProvenance) {
+        texts.forEach(t => {
+          const textContent = t.textContent || ''
+          // If text contains a dot followed by number or ∞, it's a length label - simplify it
+          if (textContent.includes('.')) {
+            const baseId = textContent.split('.')[0]
+            t.textContent = baseId
+          }
+        })
+      }
+      
+      if (nodeId && provenanceNodeSet.has(nodeId)) {
+        // Provenance node - dark gray fill
+        if (shape) {
+          shape.setAttribute('data-provenance', 'true')
+          ;(shape as SVGElement).style.fill = '#bebebe'
+          
+          // Target node gets thick border
+          if (nodeId === provenanceTargetNode) {
+            shape.setAttribute('data-provenance-target', 'true')
+            ;(shape as SVGElement).style.strokeWidth = '5'
+          }
+        }
+      } else {
+        // Non-provenance node - white fill, gray border, gray text for potential provenance
+        if (isPotentialProvenance) {
+          if (shape) {
+            ;(shape as SVGElement).style.fill = 'white'
+            ;(shape as SVGElement).style.stroke = '#cccccc'
+          }
+          // Gray out the node label text
+          texts.forEach(t => {
+            ;(t as SVGElement).style.fill = '#cccccc'
+          })
+        }
+      }
+    })
+    
+    // Style all edges
+    svg.querySelectorAll('.edge').forEach((edge) => {
+      const titleEl = edge.querySelector('title')
+      const edgeTitle = titleEl?.textContent?.trim()
+      
+      if (edgeTitle) {
+        const paths = edge.querySelectorAll('path')
+        const polygons = edge.querySelectorAll('polygon')
+        const texts = edge.querySelectorAll('text')
+        
+        // For potential provenance, hide ALL edge labels
+        if (isPotentialProvenance) {
+          texts.forEach(t => {
+            ;(t as SVGElement).style.display = 'none'
+          })
+        }
+        
+        // Parse edge title to get source and target: "from->to"
+        const edgeParts = edgeTitle.split('->')
+        const edgeSource = edgeParts.length === 2 ? edgeParts[0] : null
+        const edgeTarget = edgeParts.length === 2 ? edgeParts[1] : null
+        
+        if (isPotentialProvenance) {
+          // For potential provenance: edge is black only if BOTH nodes are in provenance
+          const sourceInProvenance = edgeSource && provenanceNodeSet.has(edgeSource)
+          const targetInProvenance = edgeTarget && provenanceNodeSet.has(edgeTarget)
+          
+          if (sourceInProvenance && targetInProvenance) {
+            // Both nodes are in provenance - edge is black
+            paths.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#000000'
+              ;(p as SVGElement).style.strokeDasharray = 'none'
+            })
+            polygons.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#000000'
+              ;(p as SVGElement).style.fill = '#000000'
+            })
+          } else {
+            // At least one node is NOT in provenance - edge is gray
+            paths.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.strokeDasharray = 'none'
+            })
+            polygons.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.fill = '#d3d3d3'
+            })
+          }
+        } else if (provenanceEdgeSet.has(edgeTitle)) {
+          // For actual/primary: provenance edge - make it black
+          edge.setAttribute('data-provenance', 'true')
+          paths.forEach(p => {
+            ;(p as SVGElement).style.stroke = '#000000'
+          })
+          polygons.forEach(p => {
+            ;(p as SVGElement).style.stroke = '#000000'
+            ;(p as SVGElement).style.fill = '#000000'
+          })
+        } else {
+          // For actual/primary: non-provenance edge - light gray
+          paths.forEach(p => {
+            ;(p as SVGElement).style.stroke = '#d3d3d3'
+          })
+          polygons.forEach(p => {
+            ;(p as SVGElement).style.stroke = '#d3d3d3'
+            ;(p as SVGElement).style.fill = '#d3d3d3'
+          })
+        }
+      }
+    })
+  }, [svgContent, provenanceData, provenanceTargetNode, provenanceType])
 
   if (isLoading) {
     return (

@@ -6,6 +6,36 @@ import {
   COMPLETE_ENCODING,
 } from "./encodings"
 
+// Type for provenance result
+export interface ProvenanceResult {
+  nodes: string[]
+  edges: Array<{ from: string; to: string }>
+}
+
+// Cache for the provenance encoding
+let provenanceEncodingCache: string | null = null
+
+async function getProvenanceEncoding(): Promise<string> {
+  if (provenanceEncodingCache) {
+    return provenanceEncodingCache
+  }
+  
+  try {
+    console.log("[getProvenanceEncoding] Fetching encoding from /clingo/three_prov_cal.dl")
+    const response = await fetch('/clingo/three_prov_cal.dl')
+    if (!response.ok) {
+      throw new Error(`Failed to fetch provenance encoding: ${response.status}`)
+    }
+    provenanceEncodingCache = await response.text()
+    console.log("[getProvenanceEncoding] Encoding loaded, length:", provenanceEncodingCache.length)
+    console.log("[getProvenanceEncoding] First 200 chars:", provenanceEncodingCache.slice(0, 200))
+    return provenanceEncodingCache
+  } catch (error) {
+    console.error("Error fetching provenance encoding:", error)
+    throw error
+  }
+}
+
 // Type for clingo-wasm result
 interface ClingoResult {
   Result: "SATISFIABLE" | "UNSATISFIABLE" | "UNKNOWN" | "OPTIMUM FOUND"
@@ -902,3 +932,106 @@ function createEmptyResult(framework: ArgumentFramework): SemanticsResult {
     provenance,
   }
 }
+
+/**
+ * Compute provenance for a target node
+ * @param framework - The argumentation framework
+ * @param targetNode - The node to compute provenance for
+ * @param provenanceType - Type of provenance: "potential", "actual", or "primary"
+ * @returns ProvenanceResult with nodes and edges in the provenance
+ */
+export async function computeProvenance(
+  framework: ArgumentFramework,
+  targetNode: string,
+  provenanceType: "potential" | "actual" | "primary"
+): Promise<ProvenanceResult> {
+  console.log(`[computeProvenance] Computing ${provenanceType} provenance for node: ${targetNode}`)
+  
+  try {
+    const run = await getClingoRun()
+    const provenanceEncoding = await getProvenanceEncoding()
+    
+    // Create ID mapping for safe ASP identifiers
+    const { toASP, fromASP } = createIdMapping(framework)
+    
+    // Convert framework to move facts
+    // Python: move("{attack.to_argument}","{attack.from_argument}")
+    // For attack from→to, we create move("to", "from")
+    // This represents the game tree where we trace back from target to its attackers
+    const moveFacts = framework.attacks
+      .map((att) => `move("${toASP.get(att.to)}", "${toASP.get(att.from)}").`)
+      .join("\n")
+    
+    // Add start fact for the target node
+    const startFact = `start("${toASP.get(targetNode)}").`
+    
+    // Combine facts with encoding
+    const program = moveFacts + "\n" + startFact + "\n" + provenanceEncoding
+    
+    console.log("[computeProvenance] Move facts:", moveFacts.split("\n").slice(0, 5).join("\n"), "...")
+    console.log("[computeProvenance] Start fact:", startFact)
+    console.log("[computeProvenance] Running clingo...")
+    
+    const result = await run(program, 0)
+    
+    if ("Error" in result) {
+      console.error("Clingo error:", result.Error)
+      return { nodes: [targetNode], edges: [] }
+    }
+    
+    console.log("[computeProvenance] Clingo result:", JSON.stringify(result).slice(0, 500))
+    
+    // Extract provenance based on type
+    const provPrefix = provenanceType === "potential" ? "pot_prov" 
+                     : provenanceType === "actual" ? "act_prov" 
+                     : "pr_prov"
+    
+    const nodes = new Set<string>()
+    const edges: Array<{ from: string; to: string }> = []
+    
+    // Always include the target node
+    nodes.add(targetNode)
+    
+    // Parse results
+    for (const call of result.Call || []) {
+      for (const witness of call.Witnesses || []) {
+        console.log("[computeProvenance] Witness values:", witness.Value)
+        for (const atom of witness.Value || []) {
+          // Parse atoms like pot_prov("a","b") or pot_prov(a,b)
+          // Handle both quoted and unquoted identifiers
+          const quotedMatch = atom.match(new RegExp(`^${provPrefix}\\("([^"]+)","([^"]+)"\\)$`))
+          const unquotedMatch = atom.match(new RegExp(`^${provPrefix}\\(([^,]+),([^)]+)\\)$`))
+          const match = quotedMatch || unquotedMatch
+          
+          if (match) {
+            const [, aspSource, aspTarget] = match
+            // Remove quotes if present
+            const cleanSource = aspSource.replace(/^"|"$/g, '')
+            const cleanTarget = aspTarget.replace(/^"|"$/g, '')
+            const originalSource = fromASP.get(cleanSource) || cleanSource
+            const originalTarget = fromASP.get(cleanTarget) || cleanTarget
+            
+            nodes.add(originalSource)
+            nodes.add(originalTarget)
+            // prov(source, target) where move(source, target) exists
+            // move(to, from) was created from attack from→to
+            // So prov(to, from) means the edge from→to is in provenance
+            // Return as {from: originalTarget, to: originalSource} to get original attack direction
+            edges.push({ from: originalTarget, to: originalSource })
+            console.log(`[computeProvenance] Found ${provPrefix}("${originalSource}", "${originalTarget}") -> edge ${originalTarget}->${originalSource}`)
+          }
+        }
+      }
+    }
+    
+    console.log(`[computeProvenance] Found ${nodes.size} nodes and ${edges.length} edges`)
+    console.log(`[computeProvenance] Nodes:`, Array.from(nodes))
+    console.log(`[computeProvenance] Edges:`, edges)
+    return { nodes: Array.from(nodes), edges }
+    
+  } catch (error) {
+    console.error("Error computing provenance:", error)
+    return { nodes: [targetNode], edges: [] }
+  }
+}
+
