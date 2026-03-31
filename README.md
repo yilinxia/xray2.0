@@ -30,8 +30,8 @@ AF-XRAY (Argumentation Framework eXplanation, Reasoning, and AnalYsis) is a Java
 
 ```bash
 # Clone the repository
-git clone https://github.com/yilinxia/xray2.0
-cd xray2.0
+git clone https://github.com/yilinxia/af-xray
+cd af-xray
 
 # Install dependencies
 npm install
@@ -102,14 +102,11 @@ digraph G {
 
 ```bash
 # Clone the repository
-git clone https://github.com/yilinxia/xray2.0
-cd xray2.0
+git clone https://github.com/yilinxia/af-xray
+cd af-xray
 
 # Install dependencies
 npm install
-
-# Run tests
-npm run test
 
 # Start development server
 npm run dev
@@ -118,18 +115,26 @@ npm run dev
 ### Project Structure
 
 ```
-xray2.0/
+af-xray/
 ├── app/                    # Next.js app directory
-├── components/            # React components
-│   ├── ui/               # Reusable UI components
-│   ├── argument-graph.tsx # Main graph visualization
+├── components/             # React components
+│   ├── ui/                 # Reusable UI components (shadcn/ui)
+│   ├── argument-graph.tsx  # Main graph visualization
 │   ├── semantics-panel.tsx # Semantics computation panel
-│   └── json-editor.tsx   # Framework editor
-├── lib/                  # Utility functions
-│   ├── argumentation.ts  # Core argumentation logic
-│   ├── types.ts          # TypeScript type definitions
-│   └── utils.ts          # Utility functions
-└── public/               # Static assets
+│   ├── graphviz-viewer.tsx # Graphviz SVG rendering
+│   ├── graphviz-config.tsx # Graphviz configuration
+│   ├── json-editor.tsx     # Framework editor
+│   ├── provenance-modal.tsx # Provenance display
+│   └── tutorial-graph.tsx  # Tutorial embedded graphs
+├── lib/                    # Utility functions
+│   ├── argumentation.ts    # Core argumentation logic
+│   ├── clingo-semantics.ts # Clingo WASM integration
+│   ├── graphviz.ts         # Graphviz DOT generation
+│   ├── graphviz-layout.ts  # Graphviz WASM layout
+│   ├── types.ts            # TypeScript type definitions
+│   └── utils.ts            # Utility functions
+└── public/                 # Static assets
+    └── examples/           # Example AF frameworks
 ```
 
 ## Citation
@@ -138,13 +143,13 @@ To learn more about AF-XRAY, check out our research paper published at ICAIL'25.
 
 ```bibtex
 @inproceedings{xia2025afxray,
-  title     = {AF-Xray: Visual Explanation and Resolution of Ambiguity in Legal Argumentation Frameworks},
+  title     = {AF-XRAY: Visual Explanation and Resolution of Ambiguity in Legal Argumentation Frameworks},
   author    = {Yilin Xia and Heng Zheng and Shawn Bowers and Bertram Ludäscher},
   booktitle = {Proceedings of the Twentieth International Conference on Artificial Intelligence and Law (ICAIL 2025)},
   year      = {2025},
-  pages     = {483--485},
   address   = {Chicago, IL, USA},
   publisher = {ACM},
+  doi       = {10.1145/3769126.3769246},
   isbn      = {979-8-4007-1939-4}
 }
 ```
