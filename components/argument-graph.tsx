@@ -33,9 +33,14 @@ interface ArgumentGraphProps {
   initialFramework: ArgumentFramework | null
   semantics: Semantics
   onFrameworkChange: (framework: ArgumentFramework) => void
+  selectedExtension?: {
+    accepted: string[]
+    rejected: string[]
+    undecided: string[]
+  } | null
 }
 
-export default function ArgumentGraph({ framework, initialFramework, semantics, onFrameworkChange }: ArgumentGraphProps) {
+export default function ArgumentGraph({ framework, initialFramework, semantics, onFrameworkChange, selectedExtension }: ArgumentGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
@@ -44,6 +49,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const [selectedEdge, setSelectedEdge] = useState<Attack | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [semanticsResult, setSemanticResult] = useState<any>(null)
+  const [groundedResult, setGroundedResult] = useState<{ accepted: string[], rejected: string[], undecided: string[] } | null>(null)
   const [provenanceType, setProvenanceType] = useState<ProvenanceType>("actual")
 
   // Node editor state
@@ -125,8 +131,21 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   }
 
   // Apply the selected layout to the graph
-  const applyLayout = (layoutName: string) => {
+  const applyLayout = (layoutName: string, onComplete?: () => void) => {
     if (!cyRef.current) return
+
+    // Get node count to adjust spacing dynamically
+    const nodeCount = cyRef.current.nodes().length
+    
+    // Calculate dynamic spacing - much tighter to keep nodes large when fitted
+    const getSpacingFactor = () => {
+      if (nodeCount <= 5) return 0.6
+      if (nodeCount <= 10) return 0.5
+      if (nodeCount <= 20) return 0.4
+      if (nodeCount <= 30) return 0.3
+      return 0.25
+    }
+    const spacingFactor = getSpacingFactor()
 
     // Define layout options based on the selected layout
     let layoutOptions: any = { name: layoutName }
@@ -136,20 +155,20 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       layoutOptions = {
         ...layoutOptions,
         directed: true,
-        padding: 30,
-        spacingFactor: 1.5,
+        padding: 10,
+        spacingFactor: spacingFactor,
         animate: true,
       }
     } else if (layoutName === "cose") {
       layoutOptions = {
         ...layoutOptions,
-        idealEdgeLength: 100,
+        idealEdgeLength: Math.max(30, 80 * spacingFactor),
         nodeOverlap: 20,
         refresh: 20,
         fit: true,
-        padding: 30,
+        padding: 10,
         randomize: false,
-        componentSpacing: 100,
+        componentSpacing: Math.max(30, 80 * spacingFactor),
         nodeRepulsion: 400000,
         edgeElasticity: 100,
         nestingFactor: 5,
@@ -161,7 +180,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     } else if (layoutName === "concentric") {
       layoutOptions = {
         ...layoutOptions,
-        minNodeSpacing: 50,
+        minNodeSpacing: Math.max(10, 30 * spacingFactor),
         animate: true,
         concentric: function (node: cytoscape.NodeSingular) {
           // Try to extract the number after the dot in the label, e.g., 'A.2' => 2, 'M.∞' => 1000
@@ -179,10 +198,21 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         ...layoutOptions,
         name: "dagre",
         rankDir: "TB", // Top to Bottom
-        nodeSep: 50,
-        rankSep: 100,
+        nodeSep: Math.max(10, 30 * spacingFactor),
+        rankSep: Math.max(20, 60 * spacingFactor),
         animate: true,
       }
+    } else if (layoutName === "circle" || layoutName === "grid") {
+      layoutOptions = {
+        ...layoutOptions,
+        spacingFactor: spacingFactor,
+        animate: true,
+      }
+    }
+
+    // Add stop callback to fit after layout completes
+    if (onComplete) {
+      layoutOptions.stop = onComplete
     }
 
     // Run the layout
@@ -371,43 +401,85 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     URL.revokeObjectURL(url)
   }
 
-  // Update Cytoscape node colors based on Graphviz config
+  // Update Cytoscape node colors based on selected extension
   const updateNodeColors = () => {
-    if (!cyRef.current || !semanticsResult) return
+    if (!cyRef.current) return
+
+    // Use selectedExtension if provided, otherwise fall back to semanticsResult
+    const extensionData = selectedExtension || (semanticsResult ? {
+      accepted: semanticsResult.accepted,
+      rejected: semanticsResult.rejected,
+      undecided: semanticsResult.undecided
+    } : null)
+    
+    if (!extensionData) return
+
+    const isGroundedSemantics = semantics === "grounded"
 
     cyRef.current.nodes().forEach((node) => {
       const nodeId = node.id()
-      const nodeData = node.data()
-      const nodeValue = nodeData.value // Check if node has a manual value set
 
       // Remove existing classes
-      node.removeClass("accepted rejected undecided")
+      node.removeClass("accepted rejected undecided undecided-light-blue undecided-light-orange")
 
-      // Only apply colors if node has a manual value set
-      if (nodeValue === "accepted") {
-        node.style("background-color", graphvizConfig.acceptedColor)
-        node.addClass("accepted")
-      } else if (nodeValue === "defeated") {
-        node.style("background-color", graphvizConfig.rejectedColor)
-        node.addClass("rejected")
-      } else if (nodeValue === "undecided") {
-        node.style("background-color", graphvizConfig.undecidedColor)
-        node.addClass("undecided")
+      // For grounded semantics: use standard blue, orange, yellow
+      // For other semantics: use lighter colors for nodes that were UNDEC in grounded
+      if (isGroundedSemantics) {
+        // Grounded semantics: standard colors
+        if (extensionData.accepted.includes(nodeId)) {
+          node.addClass("accepted")
+        } else if (extensionData.rejected.includes(nodeId)) {
+          node.addClass("rejected")
+        } else if (extensionData.undecided.includes(nodeId)) {
+          node.addClass("undecided")
+        }
       } else {
-        // No manual value set - use default gray color
-        node.style("background-color", "#ffffff")
-        node.removeClass("accepted rejected undecided")
+        // Non-grounded semantics: check if node was UNDEC in grounded
+        const wasUndecidedInGrounded = groundedResult?.undecided.includes(nodeId) ?? false
+
+        if (extensionData.accepted.includes(nodeId)) {
+          if (wasUndecidedInGrounded) {
+            // IN in current extension but was UNDEC in grounded -> light blue
+            node.addClass("undecided-light-blue")
+          } else {
+            node.addClass("accepted")
+          }
+        } else if (extensionData.rejected.includes(nodeId)) {
+          if (wasUndecidedInGrounded) {
+            // OUT in current extension but was UNDEC in grounded -> light orange
+            node.addClass("undecided-light-orange")
+          } else {
+            node.addClass("rejected")
+          }
+        } else if (extensionData.undecided.includes(nodeId)) {
+          node.addClass("undecided")
+        }
       }
     })
   }
+
+  // Apply colors when selected extension or semantics results change
+  useEffect(() => {
+    updateNodeColors()
+  }, [selectedExtension, semanticsResult, semantics, groundedResult])
 
   // Initialize and update the graph
   useEffect(() => {
     if (!containerRef.current || !framework) return
 
-    // Compute semantics result
-    const result = computeSemantics(framework, semantics)
-    setSemanticResult(result)
+    // Compute semantics result (now async)
+    computeSemantics(framework, semantics).then((result) => {
+      setSemanticResult(result)
+    })
+
+    // Always compute grounded semantics for comparison (used for lighter colors)
+    computeSemantics(framework, "grounded").then((result) => {
+      setGroundedResult({
+        accepted: result.accepted,
+        rejected: result.rejected,
+        undecided: result.undecided
+      })
+    })
 
     // Create the graph if it doesn't exist
     if (!cyRef.current) {
@@ -427,9 +499,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               color: "#1f2937",
               "text-valign": "center",
               "text-halign": "center",
-              "font-size": "14px",
-              width: 60,
-              height: 60,
+              "font-size": "22px",
+              width: 100,
+              height: 100,
               shape: "ellipse",
             },
           },
@@ -446,25 +518,41 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           {
             selector: ".accepted",
             style: {
-              "background-color": graphvizConfig.acceptedColor,
+              "background-color": "#40cfff", // Blue
               "border-color": "#000000",
-              "border-width": 1,
+              "border-width": 2,
             },
           },
           {
             selector: ".rejected",
             style: {
-              "background-color": graphvizConfig.rejectedColor,
+              "background-color": "#ffb763", // Orange
               "border-color": "#000000",
-              "border-width": 1,
+              "border-width": 2,
             },
           },
           {
             selector: ".undecided",
             style: {
-              "background-color": graphvizConfig.undecidedColor,
+              "background-color": "#fefe62", // Yellow
               "border-color": "#000000",
-              "border-width": 1,
+              "border-width": 2,
+            },
+          },
+          {
+            selector: ".undecided-light-blue",
+            style: {
+              "background-color": "#a6e9ff", // Lighter blue for undecided that would be accepted
+              "border-color": "#000000",
+              "border-width": 2,
+            },
+          },
+          {
+            selector: ".undecided-light-orange",
+            style: {
+              "background-color": "#ffe6c9", // Lighter orange for undecided that would be rejected
+              "border-color": "#000000",
+              "border-width": 2,
             },
           },
           {
@@ -744,14 +832,15 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       })
     })
 
-    // Apply layout
-    applyLayout(currentLayout)
+    // Apply layout and fit after it completes
+    applyLayout(currentLayout, () => {
+      if (cyRef.current) {
+        cyRef.current.fit(undefined, 30)
+      }
+    })
 
     // Apply node coloring (respects manual values and semantics)
     updateNodeColors()
-
-    // Fit the graph to the viewport
-    cy.fit()
 
     // Clear selected edge when framework changes
     setSelectedEdge(null)
@@ -1010,7 +1099,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     setTimeout(() => handleDeleteNode(), 0)
     setContextMenu((c) => ({ ...c, open: false }))
   }
-  const handleContextChangeValue = (value: "accepted" | "defeated" | "undecided") => {
+  const handleContextChangeValue = async (value: "accepted" | "defeated" | "undecided") => {
     if (!contextMenu.nodeId) return;
     const node = getArgument(contextMenu.nodeId);
     if (!node) return;
@@ -1029,7 +1118,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     onFrameworkChange(newFramework);
 
     // Recompute semantics with the updated framework and propagate changes
-    const updatedResult = computeSemantics(newFramework, semantics);
+    const updatedResult = await computeSemantics(newFramework, semantics);
     setSemanticResult(updatedResult);
 
     // Only propagate values to nodes that already have manual values set
@@ -1160,7 +1249,12 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   const handleFitToWindow = () => {
     if (!cyRef.current) return
-    cyRef.current.fit()
+    // Re-apply layout with dynamic spacing and then fit after layout completes
+    applyLayout(currentLayout, () => {
+      if (cyRef.current) {
+        cyRef.current.fit(undefined, 30)
+      }
+    })
   }
 
   // Get the argument for the hovered node
@@ -1417,16 +1511,28 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         <div className="absolute bottom-4 right-4 z-10 bg-white/90 rounded-md shadow-md p-3 flex flex-col gap-2 border">
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
-            <span className="text-sm">Accepted</span>
+            <span className="text-sm">Accepted (IN)</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
-            <span className="text-sm">Rejected</span>
+            <span className="text-sm">Rejected (OUT)</span>
           </div>
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
-            <span className="text-sm">Undecided</span>
+            <span className="text-sm">Undecided (UNDEC)</span>
           </div>
+          {semantics !== "grounded" && (
+            <>
+              <div className="flex items-center">
+                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>
+                <span className="text-sm">IN (was UNDEC in grounded)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffe6c9" }}></div>
+                <span className="text-sm">OUT (was UNDEC in grounded)</span>
+              </div>
+            </>
+          )}
           <div className="flex items-center">
             <div className="w-4 h-4 rounded-full border-2 border-red-500 border-dashed bg-transparent mr-2"></div>
             <span className="text-sm">Attacker</span>

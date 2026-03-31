@@ -1,0 +1,17 @@
+% Derive node list
+node(X) :- attacks(X,_).
+node(X) :- attacks(_,X).
+
+% Use node count as max depth
+max(N) :- N = #count { X : node(X) }.
+num(0..N) :- max(N).
+
+% Base case
+distance(X,0) :- target(X).
+
+% Recursive rule
+distance(X,N+1) :- attacks(X,Y), N = #min { D : distance(Y,D) }, num(N).
+
+min_distance(X,D) :- distance(X,D), D = #min { D1 : distance(X,D1) }.
+
+#show min_distance/2.

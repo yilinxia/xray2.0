@@ -2,13 +2,14 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
-import { Upload, FileText, RefreshCw, Database, PlusCircle, Edit, Download } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Upload, FileText, RefreshCw, Database, PlusCircle, Edit, Download, HelpCircle } from "lucide-react"
 import { Icon } from '@iconify/react';
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import ArgumentGraph from "@/components/argument-graph"
 import SemanticsPanel from "@/components/semantics-panel"
 import JsonEditor from "@/components/json-editor"
@@ -25,7 +26,17 @@ export default function ArgumentationFramework() {
   const [exampleFrameworks, setExampleFrameworks] = useState<ExampleFramework[]>([])
   const [isLoadingExamples, setIsLoadingExamples] = useState(true)
   const [currentFrameworkLabel, setCurrentFrameworkLabel] = useState<string>("")
+  const [selectedExtension, setSelectedExtension] = useState<{
+    accepted: string[]
+    rejected: string[]
+    undecided: string[]
+  } | null>(null)
   const { toast } = useToast()
+
+  // Handle extension selection from semantics panel
+  const handleExtensionSelect = useCallback((accepted: string[], rejected: string[], undecided: string[]) => {
+    setSelectedExtension({ accepted, rejected, undecided })
+  }, [])
 
   // Load example frameworks on component mount
   useEffect(() => {
@@ -225,17 +236,26 @@ export default function ArgumentationFramework() {
             framework={framework}
             selectedSemantics={selectedSemantics}
             onSemanticsChange={setSelectedSemantics}
+            onExtensionSelect={handleExtensionSelect}
           />
         </div>
 
         <div className="md:col-span-3">
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-3">
-              <CardTitle>Argument Graph</CardTitle>
-              <CardDescription>
-                Hover over nodes to see information and hyperlinks. Click on a node to visualize how its value is
-                calculated. Right-click to edit node properties.
-              </CardDescription>
+              <div className="flex items-center gap-2">
+                <CardTitle>Argument Graph</CardTitle>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs">
+                      <p>Hover over nodes to see information and hyperlinks. Click on a node to visualize how its value is calculated. Right-click to edit node properties.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               {currentFrameworkLabel && (
                 <div className="mt-2 text-sm font-semibold text-blue-700">Current: {currentFrameworkLabel}</div>
               )}
@@ -247,6 +267,7 @@ export default function ArgumentationFramework() {
                   initialFramework={initialFramework}
                   semantics={selectedSemantics}
                   onFrameworkChange={handleFrameworkChange}
+                  selectedExtension={selectedExtension}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">

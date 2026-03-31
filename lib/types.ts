@@ -31,11 +31,24 @@ export type Semantics = "grounded" | "preferred" | "stable" | "complete"
 
 export type ProvenanceType = "potential" | "primary" | "actual"
 
+// Single extension result
+export interface Extension {
+  members: string[]
+  isStable?: boolean  // For preferred semantics, indicates if this extension is also stable
+}
+
 export interface SemanticsResult {
   accepted: string[]
   rejected: string[]
   undecided: string[]
   provenance: Record<string, ProvenanceInfo>
+  // For semantics with multiple extensions
+  extensions?: Extension[]
+  // For complete semantics
+  groundedExtension?: string[]
+  stableExtensions?: Extension[]
+  preferredNonStableExtensions?: Extension[]
+  otherCompleteExtensions?: Extension[]
 }
 
 export interface ProvenanceInfo {
@@ -46,6 +59,7 @@ export interface ProvenanceInfo {
   potentialProvenance?: string[]
   primaryProvenance?: string[]
   actualProvenance?: string[]
+  length?: number // Game-theoretic length (0, 2, 4... for accepted; 1, 3, 5... for defeated; Infinity for undefined)
 }
 
 export interface ExampleFramework {

@@ -1,125 +1,417 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { HelpCircle } from "lucide-react"
 import { computeSemantics } from "@/lib/argumentation"
-import type { ArgumentFramework, Semantics } from "@/lib/types"
+import type { ArgumentFramework, Semantics, SemanticsResult, Extension } from "@/lib/types"
+import { useEffect, useState, useRef } from "react"
 
 interface SemanticsPanelProps {
   framework: ArgumentFramework | null
   selectedSemantics: Semantics
   onSemanticsChange: (semantics: Semantics) => void
+  onExtensionSelect?: (extension: string[], rejected: string[], undecided: string[]) => void
 }
 
-export default function SemanticsPanel({ framework, selectedSemantics, onSemanticsChange }: SemanticsPanelProps) {
+// Label filter options
+type LabelFilter = "IN" | "UNDEC" | "OUT"
+
+export default function SemanticsPanel({ framework, selectedSemantics, onSemanticsChange, onExtensionSelect }: SemanticsPanelProps) {
+  const [semanticsResult, setSemanticsResult] = useState<SemanticsResult | null>(null)
+  const [isComputing, setIsComputing] = useState(false)
+  const [selectedExtensionValue, setSelectedExtensionValue] = useState<string | null>(null)
+  const [labelFilters, setLabelFilters] = useState<LabelFilter[]>(["IN"])
+  const computationIdRef = useRef(0)
+
+  // Semantics options in the correct order: Grounded, Stable, Preferred, Complete
   const semanticsOptions: { value: Semantics; label: string; description: string }[] = [
     {
       value: "grounded",
-      label: "Grounded Semantics",
+      label: "Grounded",
       description: "The minimal complete extension (skeptical approach)",
     },
     {
-      value: "preferred",
-      label: "Preferred Semantics",
-      description: "Maximal admissible sets of arguments",
-    },
-    {
       value: "stable",
-      label: "Stable Semantics",
+      label: "Stable",
       description: "Extensions that attack all arguments not in the extension",
     },
     {
+      value: "preferred",
+      label: "Preferred",
+      description: "Maximal admissible sets of arguments",
+    },
+    {
       value: "complete",
-      label: "Complete Semantics",
+      label: "Complete",
       description: "Admissible sets that contain all their defended arguments",
     },
   ]
 
-  // Compute semantics results if framework exists
-  const semanticsResult = framework ? computeSemantics(framework, selectedSemantics) : null
+  // Compute semantics results when framework or semantics changes
+  useEffect(() => {
+    if (!framework) {
+      setSemanticsResult(null)
+      setIsComputing(false)
+      return
+    }
+
+    const currentId = ++computationIdRef.current
+    setIsComputing(true)
+    setSemanticsResult(null)
+    setSelectedExtensionValue(null)
+
+    const runComputation = async () => {
+      try {
+        const result = await computeSemantics(framework, selectedSemantics)
+        if (currentId === computationIdRef.current) {
+          setSemanticsResult(result)
+          setIsComputing(false)
+          
+          // Auto-select the first extension
+          if (selectedSemantics === "grounded") {
+            const value = createExtensionValue(result.accepted, result.undecided, result.rejected)
+            setSelectedExtensionValue(value)
+          } else if (selectedSemantics === "complete" && result.groundedExtension) {
+            const rejected = computeRejectedFromExtension(framework, result.groundedExtension)
+            const undecided = computeUndecidedFromExtension(framework, result.groundedExtension, rejected)
+            const value = createExtensionValue(result.groundedExtension, undecided, rejected)
+            setSelectedExtensionValue(value)
+          }
+        }
+      } catch (error) {
+        console.error("Error computing semantics:", error)
+        if (currentId === computationIdRef.current) {
+          setIsComputing(false)
+        }
+      }
+    }
+
+    runComputation()
+  }, [framework, selectedSemantics])
+
+  // Notify parent when extension selection changes
+  useEffect(() => {
+    if (onExtensionSelect && selectedExtensionValue) {
+      const { inArgs, undecArgs, outArgs } = parseExtensionValue(selectedExtensionValue)
+      onExtensionSelect(inArgs, outArgs, undecArgs)
+    }
+  }, [selectedExtensionValue, onExtensionSelect])
+
+  // Helper to compute rejected arguments from an extension
+  const computeRejectedFromExtension = (fw: ArgumentFramework, extension: string[]): string[] => {
+    const rejected: string[] = []
+    for (const arg of fw.args) {
+      if (extension.includes(arg.id)) continue
+      const isAttacked = fw.attacks.some(
+        attack => extension.includes(attack.from) && attack.to === arg.id
+      )
+      if (isAttacked) {
+        rejected.push(arg.id)
+      }
+    }
+    return rejected
+  }
+
+  // Helper to compute undecided arguments
+  const computeUndecidedFromExtension = (fw: ArgumentFramework, extension: string[], rejected: string[]): string[] => {
+    return fw.args
+      .map(arg => arg.id)
+      .filter(id => !extension.includes(id) && !rejected.includes(id))
+  }
+
+  // Create extension value string (format: "IN_ARGS|UNDEC_ARGS|OUT_ARGS")
+  const createExtensionValue = (inArgs: string[], undecArgs: string[], outArgs: string[]): string => {
+    return `${inArgs.sort().join("+")}|${undecArgs.sort().join("+")}|${outArgs.sort().join("+")}`
+  }
+
+  // Parse extension value string
+  const parseExtensionValue = (value: string): { inArgs: string[], undecArgs: string[], outArgs: string[] } => {
+    const parts = value.split("|")
+    return {
+      inArgs: parts[0] ? parts[0].split("+").filter(a => a) : [],
+      undecArgs: parts[1] ? parts[1].split("+").filter(a => a) : [],
+      outArgs: parts[2] ? parts[2].split("+").filter(a => a) : [],
+    }
+  }
+
+  // Format extension label based on selected filters
+  const formatExtensionLabel = (value: string): string => {
+    const { inArgs, undecArgs, outArgs } = parseExtensionValue(value)
+    
+    const sections: string[] = []
+    
+    if (labelFilters.includes("IN")) {
+      if (labelFilters.length === 1) {
+        // Single label style
+        sections.push(`{${inArgs.join(", ")}}`)
+      } else {
+        sections.push(`IN={${inArgs.join(", ")}}`)
+      }
+    }
+    if (labelFilters.includes("UNDEC")) {
+      sections.push(`UNDEC={${undecArgs.join(", ")}}`)
+    }
+    if (labelFilters.includes("OUT")) {
+      sections.push(`OUT={${outArgs.join(", ")}}`)
+    }
+    
+    return sections.length > 0 ? sections.join("\n") : "{}"
+  }
+
+  // Toggle label filter
+  const toggleLabelFilter = (filter: LabelFilter) => {
+    setLabelFilters(prev => {
+      if (prev.includes(filter)) {
+        // Don't allow removing the last filter
+        if (prev.length === 1) return prev
+        return prev.filter(f => f !== filter)
+      } else {
+        return [...prev, filter]
+      }
+    })
+  }
+
+  // Render extension radio item
+  const renderExtensionRadio = (value: string, groupName: string) => (
+    <div
+      key={value}
+      className={`p-2 rounded border cursor-pointer transition-colors ${
+        selectedExtensionValue === value 
+          ? 'border-blue-500 bg-blue-50' 
+          : 'border-gray-200 hover:border-gray-400'
+      }`}
+      style={{ 
+        borderStyle: 'dotted',
+        borderWidth: '2px',
+        borderColor: selectedExtensionValue === value ? '#87CEEB' : '#ADD8E6'
+      }}
+      onClick={() => setSelectedExtensionValue(value)}
+    >
+      <span className="text-sm font-mono whitespace-pre-line">{formatExtensionLabel(value)}</span>
+    </div>
+  )
+
+  // Get all extensions for a category
+  const getExtensionValues = (extensions: Extension[] | undefined): string[] => {
+    if (!extensions || !framework) return []
+    return extensions.map(ext => {
+      const rejected = computeRejectedFromExtension(framework, ext.members)
+      const undecided = computeUndecidedFromExtension(framework, ext.members, rejected)
+      return createExtensionValue(ext.members, undecided, rejected)
+    })
+  }
+
+  const renderGroundedResults = () => {
+    if (!semanticsResult || !framework) return null
+
+    const value = createExtensionValue(
+      semanticsResult.accepted, 
+      semanticsResult.undecided, 
+      semanticsResult.rejected
+    )
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <h4 className="text-xs font-bold mb-2">Grounded Extension:</h4>
+          {renderExtensionRadio(value, "grounded")}
+        </div>
+      </div>
+    )
+  }
+
+  const renderStableResults = () => {
+    if (!semanticsResult || !framework) return null
+
+    const extensionValues = getExtensionValues(semanticsResult.extensions)
+
+    return (
+      <div className="space-y-3">
+        <div>
+          <h4 className="text-xs font-bold mb-2">Stable Extensions:</h4>
+          {extensionValues.length > 0 ? (
+            <div className="space-y-2">
+              {extensionValues.map(value => renderExtensionRadio(value, "stable"))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-2">(none)</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderPreferredResults = () => {
+    if (!semanticsResult || !framework) return null
+
+    const stableValues = getExtensionValues(semanticsResult.stableExtensions)
+    const nonStableValues = getExtensionValues(semanticsResult.preferredNonStableExtensions)
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xs font-bold mb-2">Stable Extensions:</h4>
+          {stableValues.length > 0 ? (
+            <div className="space-y-2">
+              {stableValues.map(value => renderExtensionRadio(value, "stable"))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-2">(none)</p>
+          )}
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold mb-2">Preferred Non-Stable Extensions:</h4>
+          {nonStableValues.length > 0 ? (
+            <div className="space-y-2">
+              {nonStableValues.map(value => renderExtensionRadio(value, "preferred"))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-2">(none)</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderCompleteResults = () => {
+    if (!semanticsResult || !framework) return null
+
+    const groundedExtension = semanticsResult.groundedExtension || semanticsResult.accepted
+    const groundedRejected = computeRejectedFromExtension(framework, groundedExtension)
+    const groundedUndecided = computeUndecidedFromExtension(framework, groundedExtension, groundedRejected)
+    const groundedValue = createExtensionValue(groundedExtension, groundedUndecided, groundedRejected)
+
+    const stableValues = getExtensionValues(semanticsResult.stableExtensions)
+    const nonStableValues = getExtensionValues(semanticsResult.preferredNonStableExtensions)
+    const otherCompleteValues = getExtensionValues(semanticsResult.otherCompleteExtensions)
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xs font-bold mb-2">Grounded Extension:</h4>
+          {renderExtensionRadio(groundedValue, "grounded")}
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold mb-2">Preferred, Stable Extensions:</h4>
+          {stableValues.length > 0 ? (
+            <div className="space-y-2">
+              {stableValues.map(value => renderExtensionRadio(value, "stable"))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-2">(none)</p>
+          )}
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold mb-2">Preferred, Non-Stable Extensions:</h4>
+          {nonStableValues.length > 0 ? (
+            <div className="space-y-2">
+              {nonStableValues.map(value => renderExtensionRadio(value, "preferred"))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-2">(none)</p>
+          )}
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold mb-2">Other Complete Extensions:</h4>
+          {otherCompleteValues.length > 0 ? (
+            <div className="space-y-2">
+              {otherCompleteValues.map(value => renderExtensionRadio(value, "other"))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic p-2">(none)</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderResults = () => {
+    switch (selectedSemantics) {
+      case "grounded":
+        return renderGroundedResults()
+      case "stable":
+        return renderStableResults()
+      case "preferred":
+        return renderPreferredResults()
+      case "complete":
+        return renderCompleteResults()
+      default:
+        return null
+    }
+  }
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle>Semantics</CardTitle>
-        <CardDescription>Select semantics to evaluate the argumentation framework</CardDescription>
+    <Card className="h-full overflow-auto">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <CardTitle>Evaluation</CardTitle>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs">
+                <p>Select semantics to evaluate the argumentation framework</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </CardHeader>
-      <CardContent>
-        <RadioGroup
-          value={selectedSemantics}
-          onValueChange={(value) => onSemanticsChange(value as Semantics)}
-          className="space-y-4"
-        >
-          {semanticsOptions.map((option) => (
-            <div key={option.value} className="flex items-start space-x-2">
-              <RadioGroupItem value={option.value} id={option.value} />
-              <div className="grid gap-1">
-                <Label htmlFor={option.value} className="font-medium">
-                  {option.label}
+      <CardContent className="space-y-4">
+        {/* Semantics Selection */}
+        <div className="flex items-center gap-4">
+          <Label className="font-bold whitespace-nowrap">Semantics</Label>
+          <select
+            value={selectedSemantics}
+            onChange={(e) => onSemanticsChange(e.target.value as Semantics)}
+            className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {semanticsOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Show Labels Filter */}
+        <div className="flex items-center gap-4">
+          <Label className="font-bold whitespace-nowrap">Show labels</Label>
+          <div className="flex gap-4">
+            {(["IN", "UNDEC", "OUT"] as LabelFilter[]).map((filter) => (
+              <div key={filter} className="flex items-center gap-1">
+                <Checkbox
+                  id={`filter-${filter}`}
+                  checked={labelFilters.includes(filter)}
+                  onCheckedChange={() => toggleLabelFilter(filter)}
+                />
+                <Label htmlFor={`filter-${filter}`} className="text-sm cursor-pointer">
+                  {filter}
                 </Label>
-                <p className="text-xs text-muted-foreground">{option.description}</p>
               </div>
-            </div>
-          ))}
-        </RadioGroup>
+            ))}
+          </div>
+        </div>
 
-        <Separator className="my-6" />
+        <Separator />
 
+        {/* Results */}
         <div className="space-y-4">
-          <h3 className="text-sm font-medium">Evaluation Results</h3>
-
           {!framework ? (
             <p className="text-sm text-muted-foreground">Load a framework to see evaluation results</p>
+          ) : isComputing ? (
+            <p className="text-sm text-muted-foreground">Computing semantics...</p>
           ) : (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-xs font-medium mb-2">Accepted Arguments</h4>
-                <div className="flex flex-wrap gap-2">
-                  {semanticsResult?.accepted.length ? (
-                    semanticsResult.accepted.map((arg) => (
-                      <Badge key={arg} variant="outline" className="bg-green-100 text-green-800 hover:bg-green-200">
-                        {arg}
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No accepted arguments</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs font-medium mb-2">Rejected Arguments</h4>
-                <div className="flex flex-wrap gap-2">
-                  {semanticsResult?.rejected.length ? (
-                    semanticsResult.rejected.map((arg) => (
-                      <Badge key={arg} variant="outline" className="bg-red-100 text-red-800 hover:bg-red-200">
-                        {arg}
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No rejected arguments</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs font-medium mb-2">Undecided Arguments</h4>
-                <div className="flex flex-wrap gap-2">
-                  {semanticsResult?.undecided.length ? (
-                    semanticsResult.undecided.map((arg) => (
-                      <Badge key={arg} variant="outline" className="bg-amber-100 text-amber-800 hover:bg-amber-200">
-                        {arg}
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No undecided arguments</p>
-                  )}
-                </div>
-              </div>
-            </div>
+            renderResults()
           )}
         </div>
       </CardContent>

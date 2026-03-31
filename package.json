@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "mkdir -p public/clingo && cp node_modules/clingo-wasm/dist/clingo.wasm public/clingo/"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -40,6 +41,7 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
+    "clingo-wasm": "^0.3.2",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "cytoscape": "latest",

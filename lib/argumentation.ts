@@ -1,4 +1,5 @@
 import type { ArgumentFramework, Semantics, SemanticsResult, ProvenanceInfo, JsonArgumentFramework } from "./types"
+import { computeSemanticsWithClingo } from "./clingo-semantics"
 
 /**
  * Parse a framework file
@@ -129,33 +130,44 @@ export function generateRandomFramework(numArguments = 5, numAttacks = 8): Argum
 }
 
 /**
- * Compute semantics for a given framework
- * This is a simplified implementation for demonstration purposes
+ * Compute semantics for a given framework using clingo-wasm
+ * This uses the proper ASP encodings from the old xray implementation
  */
-export function computeSemantics(framework: ArgumentFramework, semantics: Semantics): SemanticsResult {
-  const argIds = framework.args.map((arg) => arg.id)
+export async function computeSemantics(framework: ArgumentFramework, semantics: Semantics): Promise<SemanticsResult> {
+  console.log("[computeSemantics] Called with semantics:", semantics)
+  try {
+    // Use clingo-wasm for proper semantics computation
+    console.log("[computeSemantics] About to call computeSemanticsWithClingo...")
+    const result = await computeSemanticsWithClingo(framework, semantics)
+    console.log("[computeSemantics] Got result from clingo:", result)
+    console.log("[computeSemantics] Returning result now")
+    return result
+  } catch (error) {
+    console.error("Error computing semantics with clingo, falling back to simplified version:", error)
+    // Fallback to simplified implementation if clingo fails
+    const fallbackResult = computeSemanticsFallback(framework, semantics)
+    console.log("[computeSemantics] Returning fallback result...")
+    return fallbackResult
+  }
+}
 
-  // For demonstration purposes, we'll implement a simplified version
-  // In a real application, you would implement the actual semantics algorithms
+/**
+ * Fallback implementation (simplified) in case clingo-wasm fails
+ */
+function computeSemanticsFallback(framework: ArgumentFramework, semantics: Semantics): SemanticsResult {
+  const argIds = framework.args.map((arg) => arg.id)
 
   switch (semantics) {
     case "grounded":
-      // Simplified grounded semantics: arguments with no attackers are accepted
-      // Arguments attacked by accepted arguments are rejected
-      // Everything else is undecided
       return computeGroundedSemantics(framework)
 
     case "preferred":
-      // Simplified preferred semantics: maximize accepted arguments
-      // For demo, we'll just make a slightly more optimistic version of grounded
       return computePreferredSemantics(framework)
 
     case "stable":
-      // Simplified stable semantics: every argument is either accepted or rejected
       return computeStableSemantics(framework)
 
     case "complete":
-      // Simplified complete semantics: similar to grounded but with more accepted arguments
       return computeCompleteSemantics(framework)
 
     default:
