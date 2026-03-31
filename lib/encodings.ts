@@ -224,5 +224,18 @@ len(accepted,X,L) :- fr(S,X), L = 2*S.   % Two plies = one e:  len = 0,2,4, ..
 len(defeated,X,L) :- fg(S,X), L = 2*S-1. % Green is 1 ply behind: len = 1,3,5, ..
 len(undefined,X,infinity) :- pos(X), not len(accepted,X,_), not len(defeated,X,_). % Gap = draws
 
+% Edge type calculation
+% Winning (blue): Accepted node attacking Defeated node - label is attacker's length + 1
+edge(winning,X,Y,B)  :- attack(X,Y), len(accepted,X,L), len(defeated,Y,_), B=L+1.
+% Delaying (orange): Defeated node attacking Accepted node - label is attacker's length + 1
+edge(delaying,X,Y,B) :- attack(X,Y), len(defeated,X,L), len(accepted,Y,_), B=L+1.
+% Drawing (yellow): Undefined node attacking Undefined node - label is infinity
+edge(drawing,X,Y,infinity)  :- attack(X,Y), len(undefined,X,_), len(undefined,Y,_).
+% Blunder (gray, dotted): Suboptimal moves - no label
+edge(blunder,X,Y,0)  :- attack(X,Y), len(undefined,X,_), len(defeated,Y,_).
+edge(blunder,X,Y,0)  :- attack(X,Y), len(defeated,X,_), len(undefined,Y,_).
+edge(blunder,X,Y,0)  :- attack(X,Y), len(defeated,X,_), len(defeated,Y,_).
+
 #show len/3.
+#show edge/4.
 `

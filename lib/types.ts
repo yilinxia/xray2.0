@@ -37,11 +37,21 @@ export interface Extension {
   isStable?: boolean  // For preferred semantics, indicates if this extension is also stable
 }
 
+export type EdgeType = "winning" | "drawing" | "delaying" | "blunder"
+
+export interface EdgeInfo {
+  from: string
+  to: string
+  type: EdgeType
+  length: number | string // number for winning/delaying, "∞" for drawing, "" for blunder
+}
+
 export interface SemanticsResult {
   accepted: string[]
   rejected: string[]
   undecided: string[]
   provenance: Record<string, ProvenanceInfo>
+  edges?: EdgeInfo[] // Edge type information from grounded semantics
   // For semantics with multiple extensions
   extensions?: Extension[]
   // For complete semantics

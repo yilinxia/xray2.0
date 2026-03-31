@@ -1,4 +1,4 @@
-import type { ArgumentFramework, Semantics, SemanticsResult, ProvenanceInfo, Extension } from "./types"
+import type { ArgumentFramework, Semantics, SemanticsResult, ProvenanceInfo, Extension, EdgeInfo, EdgeType } from "./types"
 import {
   LENGTH_CAL_ENCODING,
   STABLE_ENCODING,
@@ -192,32 +192,34 @@ function extractExtensions(result: ClingoResult | ClingoError, idMapping?: Map<s
 
 /**
  * Extract length-based results from clingo (for grounded with length_cal encoding)
- * Returns {accepted, defeated, undefined} with length information
+ * Returns {accepted, defeated, undefined, edges} with length and edge information
  * @param idMapping - Optional mapping from ASP IDs back to original IDs
  */
 function extractLengthResults(result: ClingoResult | ClingoError, idMapping?: Map<string, string>): {
   accepted: Map<string, number>
   defeated: Map<string, number>
   undefined: Set<string>
+  edges: EdgeInfo[]
 } {
   const accepted = new Map<string, number>()
   const defeated = new Map<string, number>()
   const undefined = new Set<string>()
+  const edges: EdgeInfo[] = []
 
   if ("Error" in result) {
     console.error("Clingo error:", result.Error)
-    return { accepted, defeated, undefined }
+    return { accepted, defeated, undefined, edges }
   }
 
   // Iterate through all calls and witnesses
   for (const call of result.Call || []) {
     for (const witness of call.Witnesses || []) {
-      // Look for len(Status,Arg,Length) atoms
+      // Look for len(Status,Arg,Length) and edge(Type,From,To,Length) atoms
       for (const atom of witness.Value || []) {
         // Parse atoms like "len(accepted,a,0)", "len(defeated,b,1)", "len(undefined,c,infinity)"
-        const match = atom.match(/^len\((\w+),(\w+),(.+)\)$/)
-        if (match) {
-          const [, status, aspId, lengthStr] = match
+        const lenMatch = atom.match(/^len\((\w+),(\w+),(.+)\)$/)
+        if (lenMatch) {
+          const [, status, aspId, lengthStr] = lenMatch
           // Convert back to original ID if mapping provided
           const originalId = idMapping ? (idMapping.get(aspId) || aspId) : aspId
 
@@ -231,11 +233,35 @@ function extractLengthResults(result: ClingoResult | ClingoError, idMapping?: Ma
             undefined.add(originalId)
           }
         }
+
+        // Parse atoms like "edge(winning,a,b,2)", "edge(drawing,c,d,infinity)", "edge(blunder,e,f,0)"
+        const edgeMatch = atom.match(/^edge\((\w+),(\w+),(\w+),(.+)\)$/)
+        if (edgeMatch) {
+          const [, edgeType, aspFrom, aspTo, lengthStr] = edgeMatch
+          // Convert back to original IDs if mapping provided
+          const fromId = idMapping ? (idMapping.get(aspFrom) || aspFrom) : aspFrom
+          const toId = idMapping ? (idMapping.get(aspTo) || aspTo) : aspTo
+
+          // Parse length (can be number, "infinity", or "0" for blunder)
+          let length: number | string
+          if (lengthStr === "infinity") {
+            length = "∞"
+          } else {
+            length = parseInt(lengthStr, 10)
+          }
+
+          edges.push({
+            from: fromId,
+            to: toId,
+            type: edgeType as EdgeType,
+            length,
+          })
+        }
       }
     }
   }
 
-  return { accepted, defeated, undefined }
+  return { accepted, defeated, undefined, edges }
 }
 
 /**
@@ -536,8 +562,8 @@ async function computeGroundedWithLength(
 
   // Extract length-based results
   console.log("Extracting length results...")
-  const { accepted: acceptedMap, defeated: defeatedMap, undefined: undefinedSet } = extractLengthResults(result, fromASP)
-  console.log("Extracted results:", { accepted: acceptedMap, defeated: defeatedMap, undefined: undefinedSet })
+  const { accepted: acceptedMap, defeated: defeatedMap, undefined: undefinedSet, edges } = extractLengthResults(result, fromASP)
+  console.log("Extracted results:", { accepted: acceptedMap, defeated: defeatedMap, undefined: undefinedSet, edges })
 
   // Convert to arrays
   const accepted = Array.from(acceptedMap.keys())
@@ -616,6 +642,7 @@ async function computeGroundedWithLength(
     rejected,
     undecided,
     provenance,
+    edges,
   }
 
   console.log("Grounded semantics computation complete:", finalResult)

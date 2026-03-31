@@ -21,7 +21,7 @@ import type { ArgumentFramework, Semantics, ExampleFramework } from "@/lib/types
 export default function ArgumentationFramework() {
   const [framework, setFramework] = useState<ArgumentFramework | null>(null)
   const [initialFramework, setInitialFramework] = useState<ArgumentFramework | null>(null)
-  const [selectedSemantics, setSelectedSemantics] = useState<Semantics | null>("grounded")
+  const [selectedSemantics, setSelectedSemantics] = useState<Semantics | null>(null)
   const [selectedExample, setSelectedExample] = useState<string>("")
   const [isJsonEditorOpen, setIsJsonEditorOpen] = useState(false)
   const [exampleFrameworks, setExampleFrameworks] = useState<ExampleFramework[]>([])

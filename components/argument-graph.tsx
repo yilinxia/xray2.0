@@ -46,6 +46,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [currentLayout, setCurrentLayout] = useState("dagre")
+  const [layoutDirection, setLayoutDirection] = useState<"TB" | "BT" | "LR" | "RL">("BT")
   const [selectedEdge, setSelectedEdge] = useState<Attack | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [semanticsResult, setSemanticResult] = useState<any>(null)
@@ -62,11 +63,13 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Graphviz configuration
   const [graphvizConfig, setGraphvizConfig] = useState<GraphvizConfigType>({
-    direction: "LR",
+    direction: "BT",
     acceptedColor: "#40cfff", // Blue
     rejectedColor: "#ffb763", // Orange
     undecidedColor: "#fefe62", // Yellow
     showLengthLabels: false,
+    showEdgeLabels: false,
+    nodeSize: 70,
   })
 
   // Provenance checkboxes state
@@ -157,6 +160,8 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         padding: 10,
         spacingFactor: spacingFactor,
         animate: true,
+        // Map direction to breadthfirst's circle option
+        circle: false,
       }
     } else if (layoutName === "cose") {
       layoutOptions = {
@@ -196,7 +201,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       layoutOptions = {
         ...layoutOptions,
         name: "dagre",
-        rankDir: "TB", // Top to Bottom
+        rankDir: layoutDirection,
         nodeSep: Math.max(10, 30 * spacingFactor),
         rankSep: Math.max(20, 60 * spacingFactor),
         animate: true,
@@ -386,9 +391,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
   // Download graph as Graphviz .gv file
   const downloadGraphvizFile = () => {
-    if (!framework || !semantics) return
+    if (!framework) return
 
     // Pass semanticsResult for coloring and groundedResult for length labels
+    // If no semantics selected, generateGraphvizDot will generate a plain graph
     const dot = generateGraphvizDot(framework, semantics, graphvizConfig, semanticsResult || undefined, groundedResult || undefined)
     const blob = new Blob([dot], { type: "text/plain" })
     const url = URL.createObjectURL(blob)
@@ -478,10 +484,60 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     })
   }
 
+  // Update Cytoscape edge labels and colors based on grounded result
+  const updateEdgeLabels = () => {
+    if (!cyRef.current) return
+
+    // Build edge info map from grounded result
+    const edgeInfoMap = new Map<string, { type: string; length: number | string }>()
+    if (groundedResult?.edges) {
+      for (const edge of groundedResult.edges) {
+        edgeInfoMap.set(`${edge.from}-${edge.to}`, { type: edge.type, length: edge.length })
+      }
+    }
+
+    cyRef.current.edges().forEach((edge) => {
+      const sourceId = edge.source().id()
+      const targetId = edge.target().id()
+      const edgeKey = `${sourceId}-${targetId}`
+      const edgeInfo = edgeInfoMap.get(edgeKey)
+
+      // Remove existing edge type classes
+      edge.removeClass("edge-winning edge-delaying edge-drawing edge-blunder")
+
+      if (graphvizConfig.showEdgeLabels && edgeInfo) {
+        // For blunder edges, no label; for others, show the length
+        if (edgeInfo.type === "blunder") {
+          edge.data("label", "")
+        } else {
+          const lengthStr = edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length)
+          edge.data("label", lengthStr)
+        }
+        
+        // Add edge type class for coloring and styling
+        edge.addClass(`edge-${edgeInfo.type}`)
+        
+        // Set label color based on edge type (matching reference colors)
+        const colorMap: Record<string, string> = {
+          winning: "#1c72d4",   // blue
+          delaying: "#cc8400",  // orange
+          drawing: "#f1dd4b",   // yellow
+          blunder: "#919191",   // gray
+        }
+        edge.data("labelColor", colorMap[edgeInfo.type] || "#000000")
+      } else {
+        // Clear label and reset color
+        edge.data("label", "")
+        edge.data("labelColor", "#000000")
+      }
+    })
+  }
+
   // Apply colors when selected extension or semantics results change
   useEffect(() => {
     updateNodeColors()
-  }, [selectedExtension, semanticsResult, semantics, groundedResult, graphvizConfig.showLengthLabels])
+    updateEdgeLabels()
+  }, [selectedExtension, semanticsResult, semantics, groundedResult, graphvizConfig.showLengthLabels, graphvizConfig.showEdgeLabels])
 
   // Initialize and update the graph
   useEffect(() => {
@@ -534,6 +590,11 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               "target-arrow-color": "#000000",
               "target-arrow-shape": "triangle",
               "curve-style": "bezier",
+              label: "data(label)",
+              "font-size": "16px",
+              "text-rotation": "autorotate",
+              "text-margin-y": -10,
+              color: "data(labelColor)",
             },
           },
           {
@@ -629,6 +690,42 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               "target-arrow-color": "#6366f1",
               "line-style": "dashed",
               width: 3,
+            },
+          },
+          {
+            selector: "edge.edge-winning",
+            style: {
+              "line-color": "#1c72d4",
+              "target-arrow-color": "#1c72d4",
+              "target-arrow-shape": "vee",
+              "line-style": "solid",
+            },
+          },
+          {
+            selector: "edge.edge-delaying",
+            style: {
+              "line-color": "#cc8400",
+              "target-arrow-color": "#cc8400",
+              "target-arrow-shape": "vee",
+              "line-style": "solid",
+            },
+          },
+          {
+            selector: "edge.edge-drawing",
+            style: {
+              "line-color": "#f1dd4b",
+              "target-arrow-color": "#f1dd4b",
+              "target-arrow-shape": "vee",
+              "line-style": "solid",
+            },
+          },
+          {
+            selector: "edge.edge-blunder",
+            style: {
+              "line-color": "#919191",
+              "target-arrow-color": "#919191",
+              "target-arrow-shape": "triangle",
+              "line-style": "dotted",
             },
           },
         ],
@@ -840,6 +937,8 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           source: attack.from,
           target: attack.to,
           annotation: attack.annotation || "",
+          label: "",
+          labelColor: "#000000",
         },
       })
     })
@@ -853,6 +952,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
     // Apply node coloring (respects manual values and semantics)
     updateNodeColors()
+    updateEdgeLabels()
 
     // Clear selected edge when framework changes
     setSelectedEdge(null)
@@ -869,6 +969,18 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   useEffect(() => {
     updateNodeColors()
   }, [graphvizConfig.acceptedColor, graphvizConfig.rejectedColor, graphvizConfig.undecidedColor])
+
+  // Update node size when graphviz config changes
+  useEffect(() => {
+    if (!cyRef.current) return
+    // Calculate font size proportional to node size (roughly 25% of node size)
+    const fontSize = Math.max(8, Math.round(graphvizConfig.nodeSize * 0.25))
+    cyRef.current.style().selector('node').style({
+      width: graphvizConfig.nodeSize,
+      height: graphvizConfig.nodeSize,
+      'font-size': `${fontSize}px`,
+    }).update()
+  }, [graphvizConfig.nodeSize])
 
   // Update node colors when framework changes (to apply manual values)
   useEffect(() => {
@@ -1206,6 +1318,30 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     setCurrentLayout(layoutName)
   }
 
+  // Handle layout direction change
+  const handleDirectionChange = (direction: "TB" | "BT" | "LR" | "RL") => {
+    setLayoutDirection(direction)
+    // Re-apply layout with new direction
+    if (cyRef.current) {
+      applyLayout(currentLayout, () => {
+        if (cyRef.current) {
+          cyRef.current.fit(undefined, 30)
+        }
+      })
+    }
+  }
+
+  // Re-apply layout when direction changes (for dagre layout)
+  useEffect(() => {
+    if (cyRef.current && currentLayout === "dagre") {
+      applyLayout(currentLayout, () => {
+        if (cyRef.current) {
+          cyRef.current.fit(undefined, 30)
+        }
+      })
+    }
+  }, [layoutDirection])
+
   // Handle adding new node
   const handleAddNewNode = () => {
     const newNodeId = generateNodeId()
@@ -1516,6 +1652,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             config={graphvizConfig}
             onConfigChange={setGraphvizConfig}
             onDownloadGv={downloadGraphvizFile}
+            currentLayout={currentLayout}
+            onLayoutChange={handleLayoutChange}
+            layoutDirection={layoutDirection}
+            onDirectionChange={handleDirectionChange}
           />
         </div>
       </div>
@@ -1548,14 +1688,6 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
               </div>
             </>
           )}
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full border-2 border-red-500 border-dashed bg-transparent mr-2"></div>
-            <span className="text-sm">Attacker</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full border-2 border-green-500 border-dashed bg-transparent mr-2"></div>
-            <span className="text-sm">Defender</span>
-          </div>
         </div>
       )}
 

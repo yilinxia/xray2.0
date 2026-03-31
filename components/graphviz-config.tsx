@@ -10,11 +10,13 @@ import { Download, Settings } from "lucide-react"
 import type { ArgumentFramework, Semantics } from "@/lib/types"
 
 export interface GraphvizConfig {
-  direction: "LR" | "TB"
+  direction: "LR" | "TB" | "BT" | "RL"
   acceptedColor: string
   rejectedColor: string
   undecidedColor: string
   showLengthLabels: boolean
+  showEdgeLabels: boolean
+  nodeSize: number
 }
 
 interface GraphvizConfigProps {
@@ -23,7 +25,27 @@ interface GraphvizConfigProps {
   config: GraphvizConfig
   onConfigChange: (config: GraphvizConfig) => void
   onDownloadGv: () => void
+  currentLayout?: string
+  onLayoutChange?: (layout: string) => void
+  layoutDirection?: "TB" | "BT" | "LR" | "RL"
+  onDirectionChange?: (direction: "TB" | "BT" | "LR" | "RL") => void
 }
+
+const layoutOptions = [
+  { value: "dagre", label: "Layered (Dagre)" },
+  { value: "cose", label: "Force-Directed" },
+  { value: "breadthfirst", label: "Tree" },
+  { value: "circle", label: "Circle" },
+  { value: "grid", label: "Grid" },
+  { value: "concentric", label: "Concentric" },
+]
+
+const directionOptions = [
+  { value: "TB", label: "Top to Bottom" },
+  { value: "BT", label: "Bottom to Top" },
+  { value: "LR", label: "Left to Right" },
+  { value: "RL", label: "Right to Left" },
+]
 
 export default function GraphvizConfig({
   framework,
@@ -31,6 +53,10 @@ export default function GraphvizConfig({
   config,
   onConfigChange,
   onDownloadGv,
+  currentLayout,
+  onLayoutChange,
+  layoutDirection,
+  onDirectionChange,
 }: GraphvizConfigProps) {
   const handleConfigChange = (key: keyof GraphvizConfig, value: any) => {
     onConfigChange({
@@ -39,6 +65,9 @@ export default function GraphvizConfig({
     })
   }
 
+  // Check if current layout supports direction
+  const supportsDirection = currentLayout === "dagre"
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -46,21 +75,58 @@ export default function GraphvizConfig({
           <Settings className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" side="bottom" align="start" sideOffset={5}>
+      <PopoverContent className="w-80" side="left" align="start" sideOffset={5}>
         <div className="space-y-4">
           <h3 className="font-medium">Graph Configuration</h3>
 
+          {onLayoutChange && (
+            <div className="space-y-2">
+              <Label>Layout Algorithm</Label>
+              <Select value={currentLayout} onValueChange={onLayoutChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Layout" />
+                </SelectTrigger>
+                <SelectContent>
+                  {layoutOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {onDirectionChange && supportsDirection && (
+            <div className="space-y-2">
+              <Label>Layout Direction</Label>
+              <Select value={layoutDirection} onValueChange={(value) => onDirectionChange(value as "TB" | "BT" | "LR" | "RL")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  {directionOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label>Layout Direction</Label>
-            <Select value={config.direction} onValueChange={(value) => handleConfigChange("direction", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Direction" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="LR">Left to Right</SelectItem>
-                <SelectItem value="TB">Top to Bottom</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="nodeSize">Node Size: {config.nodeSize}px</Label>
+            <Input
+              id="nodeSize"
+              type="range"
+              min="10"
+              max="120"
+              step="5"
+              value={config.nodeSize}
+              onChange={(e) => handleConfigChange("nodeSize", parseInt(e.target.value, 10))}
+              className="w-full"
+            />
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -108,7 +174,16 @@ export default function GraphvizConfig({
               checked={config.showLengthLabels}
               onCheckedChange={(checked) => handleConfigChange("showLengthLabels", checked)}
             />
-            <Label htmlFor="showLengthLabels">Show Length Labels</Label>
+            <Label htmlFor="showLengthLabels">Show Node Length Labels</Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="showEdgeLabels"
+              checked={config.showEdgeLabels}
+              onCheckedChange={(checked) => handleConfigChange("showEdgeLabels", checked)}
+            />
+            <Label htmlFor="showEdgeLabels">Show Edge Type Labels</Label>
           </div>
 
           <Button onClick={onDownloadGv} className="w-full flex items-center justify-center">
