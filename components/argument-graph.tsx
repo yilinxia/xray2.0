@@ -4,14 +4,16 @@ import { useRef, useEffect, useState } from "react"
 import cytoscape from "cytoscape"
 import cytoscapeDagre from "cytoscape-dagre"
 cytoscape.use(cytoscapeDagre);
-import { Trash2, ExternalLink, Edit, ZoomIn, ZoomOut, Maximize2, RefreshCw, Dice5 } from "lucide-react"
+import { Trash2, ExternalLink, Edit, ZoomIn, ZoomOut, Maximize2, RefreshCw, Dice5, Eye, Pencil, Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { computeSemantics } from "@/lib/argumentation"
 import { generateGraphvizDot } from "@/lib/graphviz"
+import { getGraphvizLayout } from "@/lib/graphviz-layout"
 import NodeEditor from "./node-editor"
 import EdgeEditor from "./edge-editor"
 import GraphvizConfig, { type GraphvizConfig as GraphvizConfigType } from "./graphviz-config"
+import GraphvizViewer, { type GraphvizViewerRef } from "./graphviz-viewer"
 import type { ArgumentFramework, Semantics, Attack, ProvenanceInfo, Argument, ProvenanceType } from "@/lib/types"
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -45,13 +47,16 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const cyRef = useRef<cytoscape.Core | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
-  const [currentLayout, setCurrentLayout] = useState("dagre")
+  const [currentLayout, setCurrentLayout] = useState("graphviz")
   const [layoutDirection, setLayoutDirection] = useState<"TB" | "BT" | "LR" | "RL">("BT")
   const [selectedEdge, setSelectedEdge] = useState<Attack | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [semanticsResult, setSemanticResult] = useState<any>(null)
   const [groundedResult, setGroundedResult] = useState<any>(null)
   const [provenanceType, setProvenanceType] = useState<ProvenanceType>("actual")
+  
+  // View mode: "view" for Graphviz SVG, "edit" for Cytoscape
+  const [viewMode, setViewMode] = useState<"view" | "edit">("view")
 
   // Node editor state
   const [isNodeEditorOpen, setIsNodeEditorOpen] = useState(false)
@@ -69,7 +74,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     undecidedColor: "#fefe62", // Yellow
     showLengthLabels: false,
     showEdgeLabels: false,
+    useEdgeDirection: false,
     nodeSize: 70,
+    rankByLength: false,
   })
 
   // Provenance checkboxes state
@@ -135,6 +142,12 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   // Apply the selected layout to the graph
   const applyLayout = (layoutName: string, onComplete?: () => void) => {
     if (!cyRef.current) return
+
+    // Handle Graphviz layout separately (async)
+    if (layoutName === "graphviz") {
+      applyGraphvizLayout(onComplete)
+      return
+    }
 
     // Get node count to adjust spacing dynamically
     const nodeCount = cyRef.current.nodes().length
@@ -221,6 +234,92 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
     // Run the layout
     cyRef.current.layout(layoutOptions).run()
+  }
+
+  // Apply Graphviz layout using WASM
+  const applyGraphvizLayout = async (onComplete?: () => void) => {
+    if (!cyRef.current || !framework) return
+
+    try {
+      // Generate DOT string for layout (use a simple version without styling for layout calculation)
+      const dotString = generateGraphvizDotForLayout()
+      
+      // Get positions from Graphviz
+      const layoutResult = await getGraphvizLayout(dotString)
+      
+      // Apply positions to Cytoscape nodes
+      cyRef.current.nodes().forEach((node) => {
+        const nodeId = node.id()
+        const pos = layoutResult.positions[nodeId]
+        if (pos) {
+          node.position({ x: pos.x, y: pos.y })
+        }
+      })
+
+      // Fit the graph to the viewport
+      cyRef.current.fit(undefined, 30)
+      
+      if (onComplete) {
+        onComplete()
+      }
+    } catch (error) {
+      console.error("Error applying Graphviz layout:", error)
+      // Fallback to dagre layout
+      applyLayout("dagre", onComplete)
+    }
+  }
+
+  // Generate a DOT string specifically for layout calculation
+  const generateGraphvizDotForLayout = (): string => {
+    if (!framework) return ""
+
+    let dot = `digraph {\n`
+    dot += `  rankdir=${layoutDirection};\n`
+    dot += `  node [shape=circle, fixedsize=true, width=0.8, height=0.8];\n\n`
+
+    // Add nodes
+    framework.args.forEach((arg) => {
+      dot += `  "${arg.id}";\n`
+    })
+
+    dot += "\n"
+
+    // Add edges
+    framework.attacks.forEach((attack) => {
+      dot += `  "${attack.from}" -> "${attack.to}";\n`
+    })
+
+    // Add rank=same constraints if enabled and we have grounded result
+    if (graphvizConfig.rankByLength && groundedResult?.provenance) {
+      dot += "\n"
+      
+      // Group nodes by their length (exclude ∞ nodes)
+      const nodesByLength = new Map<number, string[]>()
+      
+      framework.args.forEach((arg) => {
+        const provenance = groundedResult.provenance[arg.id]
+        if (provenance?.length !== undefined && provenance.length !== Infinity) {
+          const len = provenance.length as number
+          if (!nodesByLength.has(len)) {
+            nodesByLength.set(len, [])
+          }
+          nodesByLength.get(len)!.push(arg.id)
+        }
+      })
+
+      // Sort by length and generate rank=same statements
+      const sortedLengths = Array.from(nodesByLength.keys()).sort((a, b) => a - b)
+      for (const len of sortedLengths) {
+        const nodes = nodesByLength.get(len)!
+        if (nodes.length > 1) {
+          const nodeList = nodes.map(n => `"${n}"`).join(" ")
+          dot += `  {rank=same; ${nodeList}}\n`
+        }
+      }
+    }
+
+    dot += "}\n"
+    return dot
   }
 
   // Update tooltip position when the graph is panned or zoomed
@@ -545,14 +644,23 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
 
     // Compute semantics result (now async) - only if semantics is selected
     if (semantics) {
-      computeSemantics(framework, semantics).then((result) => {
-        setSemanticResult(result)
-      })
+      if (semantics === "grounded") {
+        // For grounded semantics, use the same result for both
+        computeSemantics(framework, "grounded").then((result) => {
+          setSemanticResult(result)
+          setGroundedResult(result)
+        })
+      } else {
+        // For other semantics, compute both separately
+        computeSemantics(framework, semantics).then((result) => {
+          setSemanticResult(result)
+        })
 
-      // Always compute grounded semantics for comparison (used for lighter colors and length labels)
-      computeSemantics(framework, "grounded").then((result) => {
-        setGroundedResult(result)
-      })
+        // Always compute grounded semantics for comparison (used for lighter colors and length labels)
+        computeSemantics(framework, "grounded").then((result) => {
+          setGroundedResult(result)
+        })
+      }
     } else {
       setSemanticResult(null)
       setGroundedResult(null)
@@ -730,7 +838,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           },
         ],
         layout: {
-          name: currentLayout,
+          name: currentLayout === "graphviz" ? "preset" : currentLayout,
         },
         userZoomingEnabled: true,
         userPanningEnabled: true,
@@ -1321,8 +1429,10 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   // Handle layout direction change
   const handleDirectionChange = (direction: "TB" | "BT" | "LR" | "RL") => {
     setLayoutDirection(direction)
-    // Re-apply layout with new direction
-    if (cyRef.current) {
+    // Also update graphvizConfig.direction so GraphvizViewer uses the same direction
+    setGraphvizConfig(prev => ({ ...prev, direction }))
+    // Re-apply layout with new direction (for edit mode)
+    if (cyRef.current && viewMode === "edit") {
       applyLayout(currentLayout, () => {
         if (cyRef.current) {
           cyRef.current.fit(undefined, 30)
@@ -1331,9 +1441,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     }
   }
 
-  // Re-apply layout when direction changes (for dagre layout)
+  // Re-apply layout when direction changes (for dagre and graphviz layouts)
   useEffect(() => {
-    if (cyRef.current && currentLayout === "dagre") {
+    if (cyRef.current && (currentLayout === "dagre" || currentLayout === "graphviz")) {
       applyLayout(currentLayout, () => {
         if (cyRef.current) {
           cyRef.current.fit(undefined, 30)
@@ -1341,6 +1451,16 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
       })
     }
   }, [layoutDirection])
+
+  // Handle view mode change - resize and fit Cytoscape when switching to edit mode
+  useEffect(() => {
+    if (viewMode === "edit" && cyRef.current) {
+      // Resize Cytoscape to fit the container
+      cyRef.current.resize()
+      // Fit the graph to the viewport
+      cyRef.current.fit(undefined, 30)
+    }
+  }, [viewMode])
 
   // Handle adding new node
   const handleAddNewNode = () => {
@@ -1411,20 +1531,171 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   // Get the argument for the hovered node
   const hoveredArgument = hoveredNode ? getArgument(hoveredNode) : null
 
+  // Zoom handlers for GraphvizViewer (passed as ref)
+  const graphvizViewerRef = useRef<GraphvizViewerRef | null>(null)
+
+  const handleViewModeZoomIn = () => {
+    if (viewMode === "view" && graphvizViewerRef.current) {
+      graphvizViewerRef.current.zoomIn()
+    } else {
+      handleZoomIn()
+    }
+  }
+
+  const handleViewModeZoomOut = () => {
+    if (viewMode === "view" && graphvizViewerRef.current) {
+      graphvizViewerRef.current.zoomOut()
+    } else {
+      handleZoomOut()
+    }
+  }
+
+  const handleViewModeFit = () => {
+    if (viewMode === "view" && graphvizViewerRef.current) {
+      graphvizViewerRef.current.fit()
+    } else {
+      handleFitToWindow()
+    }
+  }
+
+  // Snapshot handler - download current view as PNG
+  const handleSnapshot = async () => {
+    if (viewMode === "view" && graphvizViewerRef.current) {
+      // For Graphviz view, use the ref method
+      graphvizViewerRef.current.snapshot()
+    } else if (viewMode === "edit" && cyRef.current) {
+      // For Cytoscape view, use built-in PNG export
+      const png = cyRef.current.png({ 
+        output: 'blob', 
+        bg: 'white',
+        scale: 2,
+        full: true
+      })
+      const url = URL.createObjectURL(png as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${framework?.name || 'graph'}-snapshot.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+  }
+
   return (
     <div className="relative w-full h-full flex flex-col">
-      <div className="flex justify-between mb-4">
-        <div>
-          {/* Removed selectedEdge and delete button from here, now handled in floating panel */}
+      {/* Graph container - same structure for both modes */}
+      <div className="relative flex-1 w-full overflow-hidden">
+        {/* View Mode: Graphviz SVG */}
+        {viewMode === "view" && (
+          <GraphvizViewer
+            ref={graphvizViewerRef}
+            framework={framework}
+            semantics={semantics}
+            selectedExtension={selectedExtension}
+            groundedResult={groundedResult}
+            config={graphvizConfig}
+          />
+        )}
+
+        {/* Edit Mode: Cytoscape container - always rendered but hidden when in view mode */}
+        <div 
+          ref={containerRef} 
+          className="absolute inset-0" 
+          style={{ display: viewMode === "edit" ? "block" : "none" }}
+        />
+
+        {/* Top right controls - same position for both modes */}
+        <div className="absolute top-4 right-4 z-20 flex gap-2">
+          {/* View mode column */}
+          <div className="flex flex-col gap-1 items-center">
+            <Button
+              variant={viewMode === "view" ? "default" : "outline"}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setViewMode("view")}
+              title="View Mode"
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            {viewMode === "view" && (
+              <>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleViewModeZoomIn} title="Zoom In">
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleViewModeZoomOut} title="Zoom Out">
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleViewModeFit} title="Fit to Window">
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleSnapshot} title="Download Snapshot">
+                  <Camera className="h-4 w-4" />
+                </Button>
+                <GraphvizConfig
+                  framework={framework}
+                  semantics={semantics}
+                  config={graphvizConfig}
+                  onConfigChange={setGraphvizConfig}
+                  onDownloadGv={downloadGraphvizFile}
+                  currentLayout={currentLayout}
+                  onLayoutChange={handleLayoutChange}
+                  layoutDirection={layoutDirection}
+                  onDirectionChange={handleDirectionChange}
+                  viewMode={viewMode}
+                />
+              </>
+            )}
+          </div>
+          
+          {/* Edit mode column */}
+          <div className="flex flex-col gap-1 items-center">
+            <Button
+              variant={viewMode === "edit" ? "default" : "outline"}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setViewMode("edit")}
+              title="Edit Mode"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            {viewMode === "edit" && (
+              <>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleViewModeZoomIn} title="Zoom In">
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleViewModeZoomOut} title="Zoom Out">
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleViewModeFit} title="Fit to Window">
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleSnapshot} title="Download Snapshot">
+                  <Camera className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleResetGraph} title="Reset Layout">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <GraphvizConfig
+                  framework={framework}
+                  semantics={semantics}
+                  config={graphvizConfig}
+                  onConfigChange={setGraphvizConfig}
+                  onDownloadGv={downloadGraphvizFile}
+                  currentLayout={currentLayout}
+                  onLayoutChange={handleLayoutChange}
+                  layoutDirection={layoutDirection}
+                  onDirectionChange={handleDirectionChange}
+                  viewMode={viewMode}
+                />
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="relative">
-        <div ref={containerRef} className="flex-1 w-full" />
-
-        {/* Edge drawing status indicator */}
-        {isDrawingEdge && (
-          <div className="absolute top-4 right-4 z-30 bg-blue-500 text-white px-3 py-2 rounded-md shadow-lg">
+        {/* Edge drawing status indicator - Edit mode only */}
+        {viewMode === "edit" && isDrawingEdge && (
+          <div className="absolute top-4 left-4 z-30 bg-blue-500 text-white px-3 py-2 rounded-md shadow-lg">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Drawing Edge</span>
             </div>
@@ -1441,7 +1712,39 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           </div>
         )}
 
-        {/* Node context menu */}
+        {/* Legend - same position for both modes */}
+        {framework && semantics && (
+          <div className="absolute bottom-4 right-4 z-10 bg-white/90 rounded-md shadow-md p-3 flex flex-col gap-2 border">
+            <div className="flex items-center">
+              <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
+              <span className="text-sm">Accepted (IN)</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
+              <span className="text-sm">Rejected (OUT)</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
+              <span className="text-sm">Undecided (UNDEC)</span>
+            </div>
+            {semantics && semantics !== "grounded" && (
+              <>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>
+                  <span className="text-sm">IN (was UNDEC in grounded)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffe6c9" }}></div>
+                  <span className="text-sm">OUT (was UNDEC in grounded)</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Edit mode specific UI elements */}
+        {viewMode === "edit" && (
+          <>
         {contextMenu.open && (
           <div
             className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[200px]"
@@ -1631,102 +1934,9 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             )
           })()
         )}
-
-        {/* Top right controls */}
-        <div className="absolute top-4 right-4 z-20 flex flex-col gap-1">
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleZoomIn}>
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleZoomOut}>
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleFitToWindow}>
-            <Maximize2 className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleResetGraph}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <GraphvizConfig
-            framework={framework}
-            semantics={semantics}
-            config={graphvizConfig}
-            onConfigChange={setGraphvizConfig}
-            onDownloadGv={downloadGraphvizFile}
-            currentLayout={currentLayout}
-            onLayoutChange={handleLayoutChange}
-            layoutDirection={layoutDirection}
-            onDirectionChange={handleDirectionChange}
-          />
-        </div>
+          </>
+        )}
       </div>
-
-      <div ref={containerRef} className="flex-1 w-full" style={{ marginTop: '4px' }} />
-
-      {framework && semantics && (
-        <div className="absolute bottom-4 right-4 z-10 bg-white/90 rounded-md shadow-md p-3 flex flex-col gap-2 border">
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
-            <span className="text-sm">Accepted (IN)</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
-            <span className="text-sm">Rejected (OUT)</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
-            <span className="text-sm">Undecided (UNDEC)</span>
-          </div>
-          {semantics && semantics !== "grounded" && (
-            <>
-              <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#a6e9ff" }}></div>
-                <span className="text-sm">IN (was UNDEC in grounded)</span>
-              </div>
-              <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffe6c9" }}></div>
-                <span className="text-sm">OUT (was UNDEC in grounded)</span>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Remove or comment out the tooltip rendering */}
-      {/* {hoveredNode && (
-        <div
-          className="absolute pointer-events-none z-50"
-          style={{
-            left: `${tooltipPosition.x}px`,
-            top: `${tooltipPosition.y}px`,
-            transform: "translate(-50%, -100%)",
-          }}
-        >
-          <div className="bg-white p-3 rounded-md shadow-lg border">
-            <div className="max-w-xs">
-              <h4 className="font-bold">{hoveredNode}</h4>
-              <p className="text-sm text-muted-foreground">
-                {hoveredArgument?.annotation || `Argument ${hoveredNode}`}
-              </p>
-              {hoveredArgument?.url && (
-                <div className="flex items-center mt-1 text-xs text-blue-500">
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  <a
-                    href={hoveredArgument.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline pointer-events-auto"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    View more information
-                  </a>
-                </div>
-              )}
-              <p className="text-xs mt-1">Click to see how this value is calculated</p>
-              <p className="text-xs">Double-click to edit</p>
-            </div>
-          </div>
-        </div>
-      )} */}
 
       <NodeEditor
         isOpen={isNodeEditorOpen}

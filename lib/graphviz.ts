@@ -42,17 +42,14 @@ export function generatePlainGraphvizDot(
   framework: ArgumentFramework,
   config: GraphvizConfig,
 ): string {
-  // Convert pixel size to inches (Graphviz uses inches, roughly 72 pixels per inch)
-  const nodeSizeInches = (config.nodeSize / 72).toFixed(2)
-
   // Start building the DOT file
   let dot = `digraph {\n`
 
   // Set graph direction
-  dot += `  rankdir=${config.direction};\n\n`
+  dot += `  rankdir=${config.direction}\n\n`
 
   // Set node defaults
-  dot += `  node [fontname="helvetica", shape=circle, fixedsize=true, width=${nodeSizeInches}, height=${nodeSizeInches}];\n`
+  dot += `  node [fontname="helvetica", shape=circle, fixedsize=true, width=0.8, height=0.8]\n`
 
   // Add nodes
   framework.args.forEach((arg) => {
@@ -67,17 +64,17 @@ export function generatePlainGraphvizDot(
       nodeAttrs.push(`tooltip="${arg.annotation.replace(/"/g, '\\"')}"`)
     }
 
-    dot += `  "${arg.id}" [${nodeAttrs.join(", ")}];\n`
+    dot += `  "${arg.id}" [${nodeAttrs.join(", ")}]\n`
   })
 
   dot += "\n"
 
   // Set edge defaults
-  dot += `  edge [labeldistance=1.5, fontsize=12, fontname="helvetica"];\n`
+  dot += `  edge[labeldistance=1.5 fontsize=12 fontname="helvetica"]\n`
 
   // Add edges (simple, no styling)
   framework.attacks.forEach((attack) => {
-    dot += `  "${attack.from}" -> "${attack.to}";\n`
+    dot += `  "${attack.from}" -> "${attack.to}"\n`
   })
 
   dot += "}\n"
@@ -106,44 +103,53 @@ export function generateGraphvizDot(
   }
 
   // Start building the DOT file
-  let dot = `digraph ArgumentationFramework {\n`
+  let dot = `digraph {\n`
+  dot += `layout=dot\n`
 
   // Set graph direction
-  dot += `  rankdir=${config.direction};\n`
+  dot += `rankdir=${config.direction}\n\n`
 
   // Set node defaults
-  dot += `  node [shape=circle, style=filled, fontname="helvetica"];\n`
-  dot += `  edge [labeldistance=1.5, fontsize=12, fontname="helvetica"];\n\n`
+  dot += `node [fontname="helvetica" shape=circle fixedsize=true width=0.8, height=0.8]\n`
 
-  // Build edge info map for quick lookup
-  const edgeInfoMap = new Map<string, EdgeInfo>()
-  if (groundedResult?.edges) {
-    for (const edge of groundedResult.edges) {
-      edgeInfoMap.set(`${edge.from}->${edge.to}`, edge)
+  // Build a map of node lengths for edge direction calculation
+  const nodeLengths = new Map<string, number | string>()
+  if (groundedResult?.provenance) {
+    for (const [nodeId, prov] of Object.entries(groundedResult.provenance)) {
+      if (prov.length !== undefined) {
+        nodeLengths.set(nodeId, prov.length === Infinity ? "∞" : prov.length)
+      }
     }
   }
+
+  // Check if this is grounded semantics
+  const isGroundedSemantics = semantics === "grounded"
 
   // Add nodes with appropriate colors
   framework.args.forEach((arg) => {
     let color = config.undecidedColor
-    let fontColor = "black"
-
+    
     // Determine node color based on semantics result if available
     if (semanticsResult) {
-      if (semanticsResult.accepted.includes(arg.id)) {
-        color = config.acceptedColor
-      } else if (semanticsResult.rejected.includes(arg.id)) {
-        color = config.rejectedColor
+      if (isGroundedSemantics) {
+        // Grounded semantics: use standard colors
+        if (semanticsResult.accepted.includes(arg.id)) {
+          color = config.acceptedColor
+        } else if (semanticsResult.rejected.includes(arg.id)) {
+          color = config.rejectedColor
+        }
+      } else {
+        // Non-grounded semantics: check if node was UNDEC in grounded for lighter colors
+        const wasUndecidedInGrounded = groundedResult?.undecided?.includes(arg.id) ?? false
+        
+        if (semanticsResult.accepted.includes(arg.id)) {
+          // Use lighter blue if was UNDEC in grounded, otherwise normal blue
+          color = wasUndecidedInGrounded ? "#a6e9ff" : config.acceptedColor
+        } else if (semanticsResult.rejected.includes(arg.id)) {
+          // Use lighter orange if was UNDEC in grounded, otherwise normal orange
+          color = wasUndecidedInGrounded ? "#ffe6c9" : config.rejectedColor
+        }
       }
-    }
-
-    // Calculate contrasting font color (simple version)
-    const r = Number.parseInt(color.slice(1, 3), 16)
-    const g = Number.parseInt(color.slice(3, 5), 16)
-    const b = Number.parseInt(color.slice(5, 7), 16)
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000
-    if (brightness < 128) {
-      fontColor = "white"
     }
 
     // Determine node label (with or without length from grounded semantics)
@@ -153,8 +159,14 @@ export function generateGraphvizDot(
       nodeLabel = len === Infinity ? `${arg.id}.∞` : `${arg.id}.${len}`
     }
 
-    // Add node with tooltip (annotation) and URL if available
-    const nodeAttrs = [`label="${nodeLabel}"`, `fillcolor="${color}"`, `fontcolor="${fontColor}"`]
+    // Build node attributes
+    const nodeAttrs = [
+      `style="filled"`,
+      `fillcolor="${color}"`,
+      `label="${nodeLabel}"`,
+      `fontsize=14`,
+      `cursor="pointer"`,
+    ]
 
     if (arg.annotation) {
       nodeAttrs.push(`tooltip="${arg.annotation.replace(/"/g, '\\"')}"`)
@@ -164,40 +176,120 @@ export function generateGraphvizDot(
       nodeAttrs.push(`URL="${arg.url}"`)
     }
 
-    dot += `  "${arg.id}" [${nodeAttrs.join(", ")}];\n`
+    dot += `  "${arg.id}" [${nodeAttrs.join(" ")}]\n`
   })
 
   dot += "\n"
 
+  // Set edge defaults
+  dot += `edge[labeldistance=1.5 fontsize=12 fontname="helvetica"]\n`
+
+  // Build edge info map for quick lookup
+  const edgeInfoMap = new Map<string, EdgeInfo>()
+  if (groundedResult?.edges) {
+    for (const edge of groundedResult.edges) {
+      edgeInfoMap.set(`${edge.from}->${edge.to}`, edge)
+    }
+  }
+
   // Add edges with optional type labels and styling
   framework.attacks.forEach((attack) => {
-    const edgeAttrs: string[] = []
     const edgeKey = `${attack.from}->${attack.to}`
     const edgeInfo = edgeInfoMap.get(edgeKey)
     
-    // Add edge styling if enabled
-    if (config.showEdgeLabels && edgeInfo) {
+    // If we have edge info, check for dir=back logic based on config
+    if (edgeInfo) {
       const style = getEdgeStyle(edgeInfo.type)
       
-      edgeAttrs.push(`color="${style.color}"`)
-      edgeAttrs.push(`style="${style.style}"`)
-      edgeAttrs.push(`fontcolor="${style.color}"`)
-      edgeAttrs.push(`arrowhead="${style.arrowhead}"`)
-      edgeAttrs.push(`arrowtail="${style.arrowtail}"`)
+      // Get lengths for from and to nodes
+      const fromLen = nodeLengths.get(attack.from)
+      const toLen = nodeLengths.get(attack.to)
       
-      // Add taillabel with length (except for blunder which has no label)
-      if (edgeInfo.type !== "blunder") {
-        const lengthStr = edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length)
-        edgeAttrs.push(`taillabel="${lengthStr}"`)
+      // Determine if this is an "against wind" edge (from higher length to lower length)
+      // Against wind: fromLen > toLen (or fromLen is ∞ and toLen is not)
+      let againstWind = false
+      if (config.useEdgeDirection && fromLen !== undefined && toLen !== undefined) {
+        const fromNum = fromLen === "∞" ? Infinity : (fromLen as number)
+        const toNum = toLen === "∞" ? Infinity : (toLen as number)
+        againstWind = fromNum > toNum
+      }
+      
+      if (config.showEdgeLabels) {
+        // Show full styling with colors and labels
+        if (againstWind) {
+          // Against wind edge: use dir=back to reverse arrow direction
+          const edgeStyle = edgeInfo.type === "winning" ? "dashed" : style.style
+          const labelStr = edgeInfo.type === "blunder" ? "" : (edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length))
+          dot += `  "${attack.to}" -> "${attack.from}" [dir=back color="${style.color}" style="${edgeStyle}" fontcolor="${style.color}" arrowtail="${style.arrowtail}" arrowhead="${style.arrowhead}" headlabel="${labelStr}"]\n`
+        } else {
+          // Normal edge direction
+          const edgeAttrs = [
+            `color="${style.color}"`,
+            `style="${style.style}"`,
+            `fontcolor="${style.color}"`,
+            `arrowtail="${style.arrowtail}"`,
+            `arrowhead="${style.arrowhead}"`,
+          ]
+          
+          // Add taillabel with length (except for blunder which has no label)
+          if (edgeInfo.type !== "blunder") {
+            const lengthStr = edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length)
+            edgeAttrs.push(`taillabel="${lengthStr}"`)
+          } else {
+            edgeAttrs.push(`taillabel=""`)
+          }
+          
+          dot += `  "${attack.from}" -> "${attack.to}" [${edgeAttrs.join(" ")}]\n`
+        }
       } else {
-        edgeAttrs.push(`taillabel=""`)
+        // Labels disabled, but still apply dir=back if enabled for proper edge direction
+        if (againstWind) {
+          dot += `  "${attack.to}" -> "${attack.from}" [dir=back]\n`
+        } else {
+          dot += `  "${attack.from}" -> "${attack.to}"\n`
+        }
       }
     } else if (attack.annotation) {
-      edgeAttrs.push(`label="${attack.annotation.replace(/"/g, '\\"')}"`)
+      dot += `  "${attack.from}" -> "${attack.to}" [label="${attack.annotation.replace(/"/g, '\\"')}"]\n`
+    } else {
+      dot += `  "${attack.from}" -> "${attack.to}"\n`
     }
-
-    dot += `  "${attack.from}" -> "${attack.to}"${edgeAttrs.length ? ` [${edgeAttrs.join(", ")}]` : ""};\n`
   })
+
+  // Add rank=same statements if enabled and we have grounded result with provenance
+  if (config.rankByLength && groundedResult?.provenance) {
+    dot += "\n"
+    
+    // Group nodes by their length (exclude ∞ nodes from ranking)
+    const nodesByLength = new Map<number, string[]>()
+    
+    framework.args.forEach((arg) => {
+      const provenance = groundedResult.provenance[arg.id]
+      if (provenance?.length !== undefined && provenance.length !== Infinity) {
+        const len = provenance.length as number
+        if (!nodesByLength.has(len)) {
+          nodesByLength.set(len, [])
+        }
+        nodesByLength.get(len)!.push(arg.id)
+      }
+    })
+
+    // Sort by length (numeric ascending)
+    const sortedLengths = Array.from(nodesByLength.keys()).sort((a, b) => a - b)
+
+    // Generate rank=same statements (ordered by length: 0, 1, 2, 3, 4, ...)
+    for (const len of sortedLengths) {
+      const nodes = nodesByLength.get(len)!
+      if (nodes.length > 1) {
+        // Only add rank=same if there are multiple nodes at this level
+        const nodeList = nodes.join(" ")
+        dot += `  {rank = same ${nodeList}}\n`
+      } else if (nodes.length === 1) {
+        // Comment out single-node ranks (following Python reference)
+        dot += `  // {rank = same ${nodes[0]}}\n`
+      }
+    }
+  }
 
   dot += "}\n"
 

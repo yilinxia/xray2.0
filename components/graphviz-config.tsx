@@ -16,7 +16,9 @@ export interface GraphvizConfig {
   undecidedColor: string
   showLengthLabels: boolean
   showEdgeLabels: boolean
+  useEdgeDirection: boolean
   nodeSize: number
+  rankByLength: boolean
 }
 
 interface GraphvizConfigProps {
@@ -29,9 +31,11 @@ interface GraphvizConfigProps {
   onLayoutChange?: (layout: string) => void
   layoutDirection?: "TB" | "BT" | "LR" | "RL"
   onDirectionChange?: (direction: "TB" | "BT" | "LR" | "RL") => void
+  viewMode?: "view" | "edit"
 }
 
 const layoutOptions = [
+  { value: "graphviz", label: "Graphviz (dot)" },
   { value: "dagre", label: "Layered (Dagre)" },
   { value: "cose", label: "Force-Directed" },
   { value: "breadthfirst", label: "Tree" },
@@ -57,6 +61,7 @@ export default function GraphvizConfig({
   onLayoutChange,
   layoutDirection,
   onDirectionChange,
+  viewMode = "edit",
 }: GraphvizConfigProps) {
   const handleConfigChange = (key: keyof GraphvizConfig, value: any) => {
     onConfigChange({
@@ -65,8 +70,11 @@ export default function GraphvizConfig({
     })
   }
 
-  // Check if current layout supports direction
-  const supportsDirection = currentLayout === "dagre"
+  // Check if current layout supports direction (in edit mode)
+  const supportsDirection = currentLayout === "dagre" || currentLayout === "graphviz"
+  
+  // In view mode, always show direction (Graphviz always supports it)
+  const showDirection = viewMode === "view" || supportsDirection
 
   return (
     <Popover>
@@ -79,7 +87,8 @@ export default function GraphvizConfig({
         <div className="space-y-4">
           <h3 className="font-medium">Graph Configuration</h3>
 
-          {onLayoutChange && (
+          {/* Layout Algorithm - only show in edit mode */}
+          {viewMode === "edit" && onLayoutChange && (
             <div className="space-y-2">
               <Label>Layout Algorithm</Label>
               <Select value={currentLayout} onValueChange={onLayoutChange}>
@@ -97,7 +106,8 @@ export default function GraphvizConfig({
             </div>
           )}
 
-          {onDirectionChange && supportsDirection && (
+          {/* Layout Direction - show in both modes when applicable */}
+          {onDirectionChange && showDirection && (
             <div className="space-y-2">
               <Label>Layout Direction</Label>
               <Select value={layoutDirection} onValueChange={(value) => onDirectionChange(value as "TB" | "BT" | "LR" | "RL")}>
@@ -184,6 +194,24 @@ export default function GraphvizConfig({
               onCheckedChange={(checked) => handleConfigChange("showEdgeLabels", checked)}
             />
             <Label htmlFor="showEdgeLabels">Show Edge Type Labels</Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="useEdgeDirection"
+              checked={config.useEdgeDirection}
+              onCheckedChange={(checked) => handleConfigChange("useEdgeDirection", checked)}
+            />
+            <Label htmlFor="useEdgeDirection">Use Edge Direction (dir=back)</Label>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="rankByLength"
+              checked={config.rankByLength}
+              onCheckedChange={(checked) => handleConfigChange("rankByLength", checked)}
+            />
+            <Label htmlFor="rankByLength">Group by Length (rank=same)</Label>
           </div>
 
           <Button onClick={onDownloadGv} className="w-full flex items-center justify-center">
