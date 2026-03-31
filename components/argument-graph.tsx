@@ -1873,7 +1873,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             {/* Provenance legend for potential provenance */}
             {viewMode === "view" && provenanceRadio === "potential" && viewModeProvenanceData ? (
               <>
-                <div className="text-xs font-semibold text-gray-600 mb-1">Provenance Legend</div>
+                <div className="text-xs font-semibold text-gray-600 mb-1">Potential Provenance</div>
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded-full mr-2 border border-gray-400" style={{ backgroundColor: "#bebebe" }}></div>
                   <span className="text-sm">Can reach target</span>
@@ -1881,6 +1881,26 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
                 <div className="flex items-center">
                   <div className="w-4 h-4 rounded-full mr-2 border border-gray-400" style={{ backgroundColor: "white" }}></div>
                   <span className="text-sm">Cannot reach target</span>
+                </div>
+              </>
+            ) : viewMode === "view" && provenanceRadio === "actual" && viewModeProvenanceData ? (
+              <>
+                <div className="text-xs font-semibold text-gray-600 mb-1">Actual Provenance</div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#40cfff" }}></div>
+                  <span className="text-sm">IN (accepted)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#ffb763" }}></div>
+                  <span className="text-sm">OUT (rejected)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: "#fefe62" }}></div>
+                  <span className="text-sm">Undecided</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 rounded-full mr-2 border border-gray-400" style={{ backgroundColor: "white" }}></div>
+                  <span className="text-sm">Not in provenance</span>
                 </div>
               </>
             ) : (
@@ -1945,15 +1965,15 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
                   </button>
                   <button
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("primary"); }}
-                  >
-                    Primary Provenance
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
                     onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("actual"); }}
                   >
                     Actual Provenance
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleContextProvenance("primary"); }}
+                  >
+                    Primary Provenance
                   </button>
                 </div>
               </div>
@@ -2138,15 +2158,15 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
                   </button>
                   <button
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                    onMouseDown={(e) => { e.stopPropagation(); handleViewModeContextProvenance("primary"); }}
-                  >
-                    Primary Provenance
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
                     onMouseDown={(e) => { e.stopPropagation(); handleViewModeContextProvenance("actual"); }}
                   >
                     Actual Provenance
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                    onMouseDown={(e) => { e.stopPropagation(); handleViewModeContextProvenance("primary"); }}
+                  >
+                    Primary Provenance
                   </button>
                 </div>
               </div>

@@ -406,6 +406,11 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
     )
     
     const isPotentialProvenance = provenanceType === "potential"
+    const isActualProvenance = provenanceType === "actual"
+    const isPrimaryProvenance = provenanceType === "primary"
+    
+    // For potential and actual: strip length labels and hide edge labels
+    const stripLabels = isPotentialProvenance || isActualProvenance
     
     // Style all nodes
     svg.querySelectorAll('.node').forEach((node) => {
@@ -417,8 +422,8 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       const shape = ellipse || polygon
       const texts = node.querySelectorAll('text')
       
-      // For potential provenance, strip length labels from ALL nodes
-      if (isPotentialProvenance) {
+      // For potential/actual provenance, strip length labels from ALL nodes
+      if (stripLabels) {
         texts.forEach(t => {
           const textContent = t.textContent || ''
           // If text contains a dot followed by number or ∞, it's a length label - simplify it
@@ -429,29 +434,53 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
         })
       }
       
-      if (nodeId && provenanceNodeSet.has(nodeId)) {
-        // Provenance node - dark gray fill
-        if (shape) {
-          shape.setAttribute('data-provenance', 'true')
-          ;(shape as SVGElement).style.fill = '#bebebe'
-          
-          // Target node gets thick border
-          if (nodeId === provenanceTargetNode) {
-            shape.setAttribute('data-provenance-target', 'true')
-            ;(shape as SVGElement).style.strokeWidth = '5'
+      if (isPotentialProvenance) {
+        // Potential provenance styling - dark gray for provenance nodes
+        if (nodeId && provenanceNodeSet.has(nodeId)) {
+          if (shape) {
+            shape.setAttribute('data-provenance', 'true')
+            ;(shape as SVGElement).style.fill = '#bebebe'
+            
+            // Target node gets thick border
+            if (nodeId === provenanceTargetNode) {
+              shape.setAttribute('data-provenance-target', 'true')
+              ;(shape as SVGElement).style.strokeWidth = '5'
+            }
           }
-        }
-      } else {
-        // Non-provenance node - white fill, gray border, gray text for potential provenance
-        if (isPotentialProvenance) {
+        } else {
+          // Non-provenance node - white fill, gray border, gray text
           if (shape) {
             ;(shape as SVGElement).style.fill = 'white'
             ;(shape as SVGElement).style.stroke = '#cccccc'
           }
-          // Gray out the node label text
           texts.forEach(t => {
             ;(t as SVGElement).style.fill = '#cccccc'
           })
+        }
+      } else if (isActualProvenance) {
+        // Actual provenance styling - keep original node colors for provenance nodes
+        if (nodeId && provenanceNodeSet.has(nodeId)) {
+          // Target node gets thick border
+          if (nodeId === provenanceTargetNode && shape) {
+            shape.setAttribute('data-provenance-target', 'true')
+            ;(shape as SVGElement).style.strokeWidth = '5'
+          }
+          // Keep original fill color
+        } else {
+          // Non-provenance node - white fill, gray border, gray text
+          if (shape) {
+            ;(shape as SVGElement).style.fill = 'white'
+            ;(shape as SVGElement).style.stroke = '#cccccc'
+          }
+          texts.forEach(t => {
+            ;(t as SVGElement).style.fill = '#cccccc'
+          })
+        }
+      } else if (isPrimaryProvenance) {
+        // Primary provenance styling - keep original colors, just highlight target
+        if (nodeId === provenanceTargetNode && shape) {
+          shape.setAttribute('data-provenance-target', 'true')
+          ;(shape as SVGElement).style.strokeWidth = '5'
         }
       }
     })
@@ -466,8 +495,8 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
         const polygons = edge.querySelectorAll('polygon')
         const texts = edge.querySelectorAll('text')
         
-        // For potential provenance, hide ALL edge labels
-        if (isPotentialProvenance) {
+        // For potential/actual provenance, hide ALL edge labels
+        if (stripLabels) {
           texts.forEach(t => {
             ;(t as SVGElement).style.display = 'none'
           })
@@ -504,25 +533,40 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
               ;(p as SVGElement).style.fill = '#d3d3d3'
             })
           }
-        } else if (provenanceEdgeSet.has(edgeTitle)) {
-          // For actual/primary: provenance edge - make it black
-          edge.setAttribute('data-provenance', 'true')
-          paths.forEach(p => {
-            ;(p as SVGElement).style.stroke = '#000000'
-          })
-          polygons.forEach(p => {
-            ;(p as SVGElement).style.stroke = '#000000'
-            ;(p as SVGElement).style.fill = '#000000'
-          })
-        } else {
-          // For actual/primary: non-provenance edge - light gray
-          paths.forEach(p => {
-            ;(p as SVGElement).style.stroke = '#d3d3d3'
-          })
-          polygons.forEach(p => {
-            ;(p as SVGElement).style.stroke = '#d3d3d3'
-            ;(p as SVGElement).style.fill = '#d3d3d3'
-          })
+        } else if (isActualProvenance) {
+          // For actual provenance: keep original edge colors, gray out if either node not in provenance
+          const sourceInProvenance = edgeSource && provenanceNodeSet.has(edgeSource)
+          const targetInProvenance = edgeTarget && provenanceNodeSet.has(edgeTarget)
+          
+          if (sourceInProvenance && targetInProvenance) {
+            // Both nodes are in provenance - keep original edge color, remove dotted style
+            paths.forEach(p => {
+              ;(p as SVGElement).style.strokeDasharray = 'none'
+            })
+          } else {
+            // At least one node is NOT in provenance - edge is gray
+            paths.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.strokeDasharray = 'none'
+            })
+            polygons.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.fill = '#d3d3d3'
+            })
+          }
+        } else if (isPrimaryProvenance) {
+          // For primary: keep original edge colors, just gray out non-provenance edges
+          if (!provenanceEdgeSet.has(edgeTitle)) {
+            // Non-provenance edge - light gray
+            paths.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+            })
+            polygons.forEach(p => {
+              ;(p as SVGElement).style.stroke = '#d3d3d3'
+              ;(p as SVGElement).style.fill = '#d3d3d3'
+            })
+          }
+          // Provenance edges keep their original colors (winning=blue, delaying=orange, etc.)
         }
       }
     })
