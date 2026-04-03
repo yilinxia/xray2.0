@@ -23,6 +23,7 @@ interface GraphvizViewerProps {
   provenanceData?: ProvenanceResult | null
   provenanceTargetNode?: string | null
   provenanceType?: "potential" | "actual" | "primary" | null
+  highlightedCriticalAttacks?: Array<{ from: string; to: string }> | null
 }
 
 export interface GraphvizViewerRef {
@@ -30,6 +31,7 @@ export interface GraphvizViewerRef {
   zoomOut: () => void
   fit: () => void
   snapshot: () => void
+  downloadSvg: () => void
   getNodePositions: () => Record<string, { x: number; y: number }>
 }
 
@@ -45,6 +47,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
   provenanceData,
   provenanceTargetNode,
   provenanceType,
+  highlightedCriticalAttacks,
 }, ref) => {
   const [svgContent, setSvgContent] = useState<string>("")
   const [isLoading, setIsLoading] = useState(true)
@@ -130,7 +133,51 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       return positions
     },
     snapshot: () => {
-      if (!svgContent) return
+      if (!svgContainerRef.current) return
+
+      // Get the actual SVG element from the DOM (with all provenance styling applied)
+      const svgElement = svgContainerRef.current.querySelector('svg')
+      if (!svgElement) return
+
+      // Clone the SVG to avoid modifying the original
+      const svgClone = svgElement.cloneNode(true) as SVGElement
+
+      // Get computed styles and inline them for proper rendering
+      const inlineStyles = (element: Element) => {
+        const computedStyle = window.getComputedStyle(element)
+        const svgEl = element as SVGElement
+        
+        // Copy relevant style properties
+        if (svgEl.style) {
+          if (computedStyle.fill && svgEl.style.fill) {
+            svgEl.setAttribute('fill', svgEl.style.fill)
+          }
+          if (computedStyle.stroke && svgEl.style.stroke) {
+            svgEl.setAttribute('stroke', svgEl.style.stroke)
+          }
+          if (computedStyle.strokeWidth && svgEl.style.strokeWidth) {
+            svgEl.setAttribute('stroke-width', svgEl.style.strokeWidth)
+          }
+          if (computedStyle.opacity && svgEl.style.opacity) {
+            svgEl.setAttribute('opacity', svgEl.style.opacity)
+          }
+          if (svgEl.style.display === 'none') {
+            svgEl.setAttribute('display', 'none')
+          }
+          if (svgEl.style.strokeDasharray) {
+            svgEl.setAttribute('stroke-dasharray', svgEl.style.strokeDasharray)
+          }
+        }
+
+        // Recursively process children
+        Array.from(element.children).forEach(child => inlineStyles(child))
+      }
+
+      inlineStyles(svgClone)
+
+      // Serialize the modified SVG
+      const serializer = new XMLSerializer()
+      const svgString = serializer.serializeToString(svgClone)
 
       // Create a canvas to convert SVG to PNG
       const canvas = document.createElement('canvas')
@@ -139,7 +186,7 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
 
       // Create an image from the SVG
       const img = new Image()
-      const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' })
+      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
       const url = URL.createObjectURL(svgBlob)
 
       img.onload = () => {
@@ -173,6 +220,63 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       }
 
       img.src = url
+    },
+    downloadSvg: () => {
+      if (!svgContainerRef.current) return
+
+      // Get the actual SVG element from the DOM (with all provenance styling applied)
+      const svgElement = svgContainerRef.current.querySelector('svg')
+      if (!svgElement) return
+
+      // Clone the SVG to avoid modifying the original
+      const svgClone = svgElement.cloneNode(true) as SVGElement
+
+      // Get computed styles and inline them for proper rendering
+      const inlineStyles = (element: Element) => {
+        const svgEl = element as SVGElement
+        
+        // Copy relevant style properties as attributes
+        if (svgEl.style) {
+          if (svgEl.style.fill) {
+            svgEl.setAttribute('fill', svgEl.style.fill)
+          }
+          if (svgEl.style.stroke) {
+            svgEl.setAttribute('stroke', svgEl.style.stroke)
+          }
+          if (svgEl.style.strokeWidth) {
+            svgEl.setAttribute('stroke-width', svgEl.style.strokeWidth)
+          }
+          if (svgEl.style.opacity) {
+            svgEl.setAttribute('opacity', svgEl.style.opacity)
+          }
+          if (svgEl.style.display === 'none') {
+            svgEl.setAttribute('display', 'none')
+          }
+          if (svgEl.style.strokeDasharray) {
+            svgEl.setAttribute('stroke-dasharray', svgEl.style.strokeDasharray)
+          }
+        }
+
+        // Recursively process children
+        Array.from(element.children).forEach(child => inlineStyles(child))
+      }
+
+      inlineStyles(svgClone)
+
+      // Serialize the modified SVG
+      const serializer = new XMLSerializer()
+      const svgString = serializer.serializeToString(svgClone)
+
+      // Download as SVG file
+      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'graph.svg'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
     },
   }))
 
@@ -619,6 +723,66 @@ const GraphvizViewer = forwardRef<GraphvizViewerRef, GraphvizViewerProps>(({
       }
     })
   }, [svgContent, provenanceData, provenanceTargetNode, provenanceType])
+
+  // Apply critical attack highlighting (red lines)
+  useEffect(() => {
+    if (!svgContainerRef.current) return
+
+    const svg = svgContainerRef.current.querySelector('svg')
+    if (!svg) return
+
+    // First, remove any previous critical attack highlighting
+    svg.querySelectorAll('.edge').forEach((edge) => {
+      edge.removeAttribute('data-critical')
+      const paths = edge.querySelectorAll('path')
+      const polygons = edge.querySelectorAll('polygon')
+      
+      // Only reset if it was marked as critical before
+      if (edge.getAttribute('data-was-critical') === 'true') {
+        paths.forEach(p => {
+          ;(p as SVGElement).style.stroke = ''
+          ;(p as SVGElement).style.strokeWidth = ''
+        })
+        polygons.forEach(p => {
+          ;(p as SVGElement).style.stroke = ''
+          ;(p as SVGElement).style.fill = ''
+        })
+        edge.removeAttribute('data-was-critical')
+      }
+    })
+
+    // If no critical attacks to highlight, we're done
+    if (!highlightedCriticalAttacks || highlightedCriticalAttacks.length === 0) return
+
+    // Create a set of critical attack edge keys for quick lookup
+    const criticalEdgeSet = new Set(
+      highlightedCriticalAttacks.map(a => `${a.from}->${a.to}`)
+    )
+
+    // Apply red highlighting to critical attack edges
+    svg.querySelectorAll('.edge').forEach((edge) => {
+      const titleEl = edge.querySelector('title')
+      const edgeTitle = titleEl?.textContent?.trim()
+
+      if (edgeTitle && criticalEdgeSet.has(edgeTitle)) {
+        edge.setAttribute('data-critical', 'true')
+        edge.setAttribute('data-was-critical', 'true')
+        
+        const paths = edge.querySelectorAll('path')
+        const polygons = edge.querySelectorAll('polygon')
+
+        // Make the edge red and thicker
+        paths.forEach(p => {
+          ;(p as SVGElement).style.stroke = '#dc2626' // red-600
+          ;(p as SVGElement).style.strokeWidth = '5'
+        })
+        polygons.forEach(p => {
+          ;(p as SVGElement).style.stroke = '#dc2626'
+          ;(p as SVGElement).style.fill = '#dc2626'
+        })
+      }
+    })
+  }, [svgContent, highlightedCriticalAttacks])
 
   if (isLoading) {
     return (

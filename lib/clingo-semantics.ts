@@ -5,12 +5,19 @@ import {
   PREFERRED_ENCODING,
   COMPLETE_ENCODING,
   THREE_PROV_CAL_ENCODING,
+  CRITICAL_ATTACKS_ENCODING,
 } from "./encodings"
 
 // Type for provenance result
 export interface ProvenanceResult {
   nodes: string[]
   edges: Array<{ from: string; to: string }>
+}
+
+// Type for critical attacks result
+export interface CriticalAttacksResult {
+  criticalAttackSets: Array<Array<{ from: string; to: string }>>
+  hasUndecidedArgs: boolean
 }
 
 function getProvenanceEncoding(): string {
@@ -132,18 +139,25 @@ function createIdMapping(framework: ArgumentFramework): { toASP: Map<string, str
 
 /**
  * Convert argument framework to ASP facts
- * @param useAttackFormat - If true, use attack(X,Y) format, otherwise use att(X,Y)
+ * @param format - "attack" for attack(X,Y), "att" for arg(X) and att(X,Y), "attacks" for attacks(X,Y)
  */
-function frameworkToASP(framework: ArgumentFramework, useAttackFormat = false): string {
+function frameworkToASP(framework: ArgumentFramework, format: "attack" | "att" | "attacks" = "att"): string {
   const facts: string[] = []
   const { toASP } = createIdMapping(framework)
 
-  if (useAttackFormat) {
+  if (format === "attack") {
     // For length_cal encoding, only need attack facts (pos is derived)
     for (const attack of framework.attacks) {
       const fromASP = toASP.get(attack.from) || toASPId(attack.from)
       const toASPId2 = toASP.get(attack.to) || toASPId(attack.to)
       facts.push(`attack(${fromASP},${toASPId2}).`)
+    }
+  } else if (format === "attacks") {
+    // For critical_cal encoding, use attacks(X,Y) format
+    for (const attack of framework.attacks) {
+      const fromASP = toASP.get(attack.from) || toASPId(attack.from)
+      const toASPId2 = toASP.get(attack.to) || toASPId(attack.to)
+      facts.push(`attacks(${fromASP},${toASPId2}).`)
     }
   } else {
     // Standard format with arg and att
@@ -408,7 +422,7 @@ async function computeStableSemantics(
   console.log("Computing stable semantics...")
 
   const { fromASP } = createIdMapping(framework)
-  const facts = frameworkToASP(framework, false)
+  const facts = frameworkToASP(framework, "att")
   const program = facts + "\n" + STABLE_ENCODING
   const result = await run(program, 0)
 
@@ -454,13 +468,13 @@ async function computePreferredSemantics(
   const { fromASP } = createIdMapping(framework)
 
   // First, get all stable extensions
-  const stableFacts = frameworkToASP(framework, false)
+  const stableFacts = frameworkToASP(framework, "att")
   const stableProgram = stableFacts + "\n" + STABLE_ENCODING
   const stableResult = await run(stableProgram, 0)
   const stableExtensionSets = extractExtensions(stableResult, fromASP)
   
   // Then, get all preferred extensions
-  const preferredFacts = frameworkToASP(framework, false)
+  const preferredFacts = frameworkToASP(framework, "att")
   const preferredProgram = preferredFacts + "\n" + PREFERRED_ENCODING
   const preferredResult = await run(preferredProgram, 0)
   const preferredExtensionSets = extractExtensions(preferredResult, fromASP)
@@ -529,19 +543,19 @@ async function computeCompleteSemantics(
   const groundedExtension = groundedResult.accepted
 
   // Get all complete extensions
-  const completeFacts = frameworkToASP(framework, false)
+  const completeFacts = frameworkToASP(framework, "att")
   const completeProgram = completeFacts + "\n" + COMPLETE_ENCODING
   const completeResult = await run(completeProgram, 0)
   const completeExtensionSets = extractExtensions(completeResult, fromASP)
 
   // Get stable extensions
-  const stableFacts = frameworkToASP(framework, false)
+  const stableFacts = frameworkToASP(framework, "att")
   const stableProgram = stableFacts + "\n" + STABLE_ENCODING
   const stableResult = await run(stableProgram, 0)
   const stableExtensionSets = extractExtensions(stableResult, fromASP)
 
   // Get preferred extensions
-  const preferredFacts = frameworkToASP(framework, false)
+  const preferredFacts = frameworkToASP(framework, "att")
   const preferredProgram = preferredFacts + "\n" + PREFERRED_ENCODING
   const preferredResult = await run(preferredProgram, 0)
   const preferredExtensionSets = extractExtensions(preferredResult, fromASP)
@@ -620,7 +634,7 @@ async function computeGroundedWithLength(
   const { fromASP } = createIdMapping(framework)
 
   // Convert framework to ASP facts using attack format
-  const facts = frameworkToASP(framework, true)
+  const facts = frameworkToASP(framework, "attack")
   console.log("ASP Facts:", facts)
 
   // Combine facts and length_cal encoding
@@ -1013,6 +1027,146 @@ export async function computeProvenance(
   } catch (error) {
     console.error("Error computing provenance:", error)
     return { nodes: [targetNode], edges: [] }
+  }
+}
+
+/**
+ * Compute critical attacks for an argumentation framework based on a selected extension.
+ * Critical attacks are attacks between arguments that are UNDECIDED in the GROUNDED semantics
+ * (computed internally via undec0), that when removed, allow more arguments to be accepted.
+ * The selected extension constraints ensure the solution is compatible with that extension.
+ * Returns all minimal sets of critical attacks.
+ * 
+ * @param framework - The argumentation framework
+ * @param selectedExtension - The currently selected extension (accepted, rejected, undecided args)
+ */
+export async function computeCriticalAttacks(
+  framework: ArgumentFramework,
+  selectedExtension?: { accepted: string[]; rejected: string[]; undecided: string[] } | null
+): Promise<CriticalAttacksResult> {
+  console.log("[computeCriticalAttacks] Computing critical attacks...")
+  console.log("[computeCriticalAttacks] Selected extension:", selectedExtension)
+  
+  try {
+    const run = await getClingoRun()
+    
+    // Create ID mapping for safe ASP identifiers
+    const { toASP, fromASP } = createIdMapping(framework)
+    
+    // If no selected extension, cannot compute critical attacks
+    if (!selectedExtension) {
+      console.log("[computeCriticalAttacks] No selected extension, skipping computation")
+      return { criticalAttackSets: [], hasUndecidedArgs: false }
+    }
+    
+    // Convert framework to ASP facts for critical attacks computation (uses attacks predicate)
+    const attackFacts = framework.attacks.map(attack => {
+      const fromId = toASP.get(attack.from) || toASPId(attack.from)
+      const toId = toASP.get(attack.to) || toASPId(attack.to)
+      return `attacks("${fromId}","${toId}").`
+    }).join("\n")
+    
+    // Generate argument facts
+    const argFacts = framework.args.map(arg => {
+      const aspId = toASP.get(arg.id) || toASPId(arg.id)
+      return `arg("${aspId}").`
+    }).join("\n")
+    
+    // Generate extension constraints based on selected extension
+    const extensionConstraints: string[] = []
+    
+    // Constraints for accepted arguments (must be in)
+    for (const arg of selectedExtension.accepted) {
+      const aspId = toASP.get(arg) || toASPId(arg)
+      extensionConstraints.push(`:- not in("${aspId}").`)
+    }
+    
+    // Constraints for rejected arguments (must be out)
+    for (const arg of selectedExtension.rejected) {
+      const aspId = toASP.get(arg) || toASPId(arg)
+      extensionConstraints.push(`:- not out("${aspId}").`)
+    }
+    
+    // Constraints for undecided arguments (must be undec)
+    for (const arg of selectedExtension.undecided) {
+      const aspId = toASP.get(arg) || toASPId(arg)
+      extensionConstraints.push(`:- not undec("${aspId}").`)
+    }
+    
+    // Combine all facts
+    const facts = argFacts + "\n" + attackFacts + "\n" + extensionConstraints.join("\n")
+    
+    // Combine facts with critical attacks encoding
+    const program = facts + "\n" + CRITICAL_ATTACKS_ENCODING
+    
+    console.log("[computeCriticalAttacks] Running clingo for critical attacks...")
+    console.log("[computeCriticalAttacks] Program:", program)
+    
+    // Run with optimization to find all optimal solutions (0 = all models)
+    const result = await run(program, 0)
+    
+    console.log("[computeCriticalAttacks] Clingo result:", JSON.stringify(result))
+    
+    if ("Error" in result) {
+      console.error("Clingo error:", result.Error)
+      return { criticalAttackSets: [], hasUndecidedArgs: true }
+    }
+    
+    // Check if UNSATISFIABLE (no valid critical attacks found)
+    if (result.Result === "UNSATISFIABLE") {
+      console.log("[computeCriticalAttacks] No critical attacks found (UNSATISFIABLE)")
+      return { criticalAttackSets: [], hasUndecidedArgs: true }
+    }
+    
+    // Parse all witnesses to get all critical attack sets
+    const allSets: Array<Array<{ from: string; to: string }>> = []
+    let minSize = Infinity
+    
+    for (const call of result.Call || []) {
+      for (const witness of call.Witnesses || []) {
+        const attackSet: Array<{ from: string; to: string }> = []
+        
+        for (const atom of witness.Value || []) {
+          // Parse atoms like critical("a","b")
+          const match = atom.match(/^critical\("([^"]+)","([^"]+)"\)$/)
+          if (match) {
+            const [, aspFrom, aspTo] = match
+            const originalFrom = fromASP.get(aspFrom) || aspFrom
+            const originalTo = fromASP.get(aspTo) || aspTo
+            attackSet.push({ from: originalFrom, to: originalTo })
+          }
+        }
+        
+        // Track minimum size for optimal solutions
+        if (attackSet.length < minSize) {
+          minSize = attackSet.length
+        }
+        
+        allSets.push(attackSet)
+      }
+    }
+    
+    // Filter to only keep optimal (minimal) solutions
+    const optimalSets = allSets.filter(set => set.length === minSize)
+    
+    // Remove duplicates (sets with same attacks in different order)
+    const uniqueSets: Array<Array<{ from: string; to: string }>> = []
+    const seenKeys = new Set<string>()
+    
+    for (const set of optimalSets) {
+      const key = set.map(a => `${a.from}->${a.to}`).sort().join("|")
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key)
+        uniqueSets.push(set)
+      }
+    }
+    
+    console.log(`[computeCriticalAttacks] Found ${uniqueSets.length} unique critical attack sets`)
+    return { criticalAttackSets: uniqueSets, hasUndecidedArgs: true }
+    
+  } catch (error) {
+    console.error("Error computing critical attacks:", error)
+    return { criticalAttackSets: [], hasUndecidedArgs: false }
   }
 }
 

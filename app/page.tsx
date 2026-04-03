@@ -33,10 +33,20 @@ export default function ArgumentationFramework() {
     rejected: string[]
     undecided: string[]
   } | null>(null)
+  const [suspendedAttacks, setSuspendedAttacks] = useState<Array<{ from: string; to: string }> | null>(null)
+  const [highlightedCriticalAttacks, setHighlightedCriticalAttacks] = useState<Array<{ from: string; to: string }> | null>(null)
   const { toast } = useToast()
 
   const handleExtensionSelect = useCallback((accepted: string[], rejected: string[], undecided: string[]) => {
     setSelectedExtension({ accepted, rejected, undecided })
+  }, [])
+
+  const handleSuspendCriticalAttacks = useCallback((attacks: Array<{ from: string; to: string }> | null) => {
+    setSuspendedAttacks(attacks)
+  }, [])
+
+  const handleHighlightCriticalAttacks = useCallback((attacks: Array<{ from: string; to: string }> | null) => {
+    setHighlightedCriticalAttacks(attacks)
   }, [])
 
   useEffect(() => {
@@ -255,12 +265,14 @@ export default function ArgumentationFramework() {
 
       {/* Main Content */}
       <div className="h-[600px] grid grid-cols-1 md:grid-cols-4 gap-4 p-4">
-        <div className="md:col-span-1">
+        <div className="md:col-span-1 h-full overflow-hidden">
           <SemanticsPanel
             framework={framework}
             selectedSemantics={selectedSemantics}
             onSemanticsChange={setSelectedSemantics}
             onExtensionSelect={handleExtensionSelect}
+            onSuspendCriticalAttacks={handleSuspendCriticalAttacks}
+            onHighlightCriticalAttacks={handleHighlightCriticalAttacks}
           />
         </div>
         <div className="md:col-span-3">
@@ -273,6 +285,8 @@ export default function ArgumentationFramework() {
                   semantics={selectedSemantics}
                   onFrameworkChange={handleFrameworkChange}
                   selectedExtension={selectedExtension}
+                  suspendedAttacks={suspendedAttacks}
+                  highlightedCriticalAttacks={highlightedCriticalAttacks}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -282,12 +296,12 @@ export default function ArgumentationFramework() {
                   </div>
                 </div>
               )}
-              <div className="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none">
+              <div className="absolute top-6 left-6 z-10 pointer-events-none">
                 <div className="flex items-center gap-2 pointer-events-auto">
-                  <span className="text-2xl font-semibold text-gray-800 bg-white/70 px-2 py-1 rounded">Argument Graph</span>
+                  <span className="text-2xl font-semibold leading-none tracking-tight text-foreground">Argument Graph</span>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button className="bg-white/70 rounded p-0.5">
+                      <button>
                         <HelpCircle className="h-4 w-4 text-muted-foreground cursor-pointer" />
                       </button>
                     </PopoverTrigger>
@@ -296,7 +310,7 @@ export default function ArgumentationFramework() {
                     </PopoverContent>
                   </Popover>
                   {currentFrameworkLabel && (
-                    <span className="text-sm font-semibold text-blue-700 bg-white/70 px-2 py-1 rounded">Current: {currentFrameworkLabel}</span>
+                    <span className="text-sm font-medium text-blue-600">Current: {currentFrameworkLabel}</span>
                   )}
                 </div>
               </div>

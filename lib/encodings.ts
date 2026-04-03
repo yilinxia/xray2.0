@@ -287,3 +287,32 @@ pr_prov(X,Y) :- pr_prov(_,X), pr_cand(X,Y).
 #show act_prov/2.
 #show pr_prov/2.
 `
+
+export const CRITICAL_ATTACKS_ENCODING = `% Compute critical attacks - attacks between undecided arguments that block acceptance
+% Source: encodings/critical_cal.dl
+
+arg(X) :- attacks(X,_).
+arg(X) :- attacks(_,X).
+
+% Compute the initial grounded extension 
+in0(X) :- arg(X), out0(Y) : attacks(Y,X).
+out0(X) :- attacks(Y,X), in0(Y).
+undec0(X) :- arg(X), not in0(X), not out0(X).
+
+% Guess critical attacks: subset of UNDEC attacks
+{critical(Y,X)} :- attacks(Y,X), undec0(Y), undec0(X). 
+
+% Keep attacks if they are not critical 
+attacks1(Y,X) :- attacks(Y,X), not critical(Y,X).
+
+% Compute grounded labeling without critical attacks 
+in(X) :- arg(X), out(Y) : attacks1(Y,X).
+out(X) :- attacks1(Y,X), in(Y).
+undec(X) :- arg(X), not in(X), not out(X).
+
+% Select solutions with fewest critical attacks
+critical_cnt(N) :- N = #count{(X,Y) : critical(X,Y)}.
+#minimize {N : critical_cnt(N)}.
+
+#show critical/2.
+`

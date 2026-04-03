@@ -27,6 +27,7 @@ interface GraphvizConfigProps {
   config: GraphvizConfig
   onConfigChange: (config: GraphvizConfig) => void
   onDownloadGv: () => void
+  onDownloadSvg?: () => void
   currentLayout?: string
   onLayoutChange?: (layout: string) => void
   layoutDirection?: "TB" | "BT" | "LR" | "RL"
@@ -57,6 +58,7 @@ export default function GraphvizConfig({
   config,
   onConfigChange,
   onDownloadGv,
+  onDownloadSvg,
   currentLayout,
   onLayoutChange,
   layoutDirection,
@@ -218,6 +220,12 @@ export default function GraphvizConfig({
             <Download className="mr-2 h-4 w-4" />
             Download as .gv file
           </Button>
+          {onDownloadSvg && (
+            <Button onClick={onDownloadSvg} variant="outline" className="w-full flex items-center justify-center">
+              <Download className="mr-2 h-4 w-4" />
+              Download as .svg file
+            </Button>
+          )}
         </div>
       </PopoverContent>
     </Popover>

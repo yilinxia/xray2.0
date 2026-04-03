@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import cytoscape from "cytoscape"
 import cytoscapeDagre from "cytoscape-dagre"
 cytoscape.use(cytoscapeDagre);
@@ -41,9 +41,11 @@ interface ArgumentGraphProps {
     rejected: string[]
     undecided: string[]
   } | null
+  suspendedAttacks?: Array<{ from: string; to: string }> | null
+  highlightedCriticalAttacks?: Array<{ from: string; to: string }> | null
 }
 
-export default function ArgumentGraph({ framework, initialFramework, semantics, onFrameworkChange, selectedExtension }: ArgumentGraphProps) {
+export default function ArgumentGraph({ framework, initialFramework, semantics, onFrameworkChange, selectedExtension, suspendedAttacks, highlightedCriticalAttacks }: ArgumentGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
@@ -94,6 +96,24 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
   const [viewModeProvenanceData, setViewModeProvenanceData] = useState<ProvenanceResult | null>(null)
   const [viewModeProvenanceTarget, setViewModeProvenanceTarget] = useState<string | null>(null)
   const [isComputingProvenance, setIsComputingProvenance] = useState(false)
+
+  // Compute effective framework with suspended attacks removed
+  const effectiveFramework = useMemo(() => {
+    if (!suspendedAttacks || suspendedAttacks.length === 0) {
+      return framework
+    }
+    
+    // Filter out suspended attacks
+    const suspendedSet = new Set(suspendedAttacks.map(a => `${a.from}->${a.to}`))
+    const filteredAttacks = framework.attacks.filter(
+      attack => !suspendedSet.has(`${attack.from}->${attack.to}`)
+    )
+    
+    return {
+      ...framework,
+      attacks: filteredAttacks
+    }
+  }, [framework, suspendedAttacks])
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -1731,7 +1751,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
         {viewMode === "view" && (
           <GraphvizViewer
             ref={graphvizViewerRef}
-            framework={framework}
+            framework={effectiveFramework}
             semantics={semantics}
             selectedExtension={selectedExtension}
             groundedResult={groundedResult}
@@ -1750,6 +1770,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             provenanceData={viewModeProvenanceData}
             provenanceTargetNode={viewModeProvenanceTarget}
             provenanceType={provenanceRadio}
+            highlightedCriticalAttacks={highlightedCriticalAttacks}
           />
         )}
 
@@ -1758,6 +1779,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
           ref={containerRef}
           className="absolute inset-0"
           style={{ display: viewMode === "edit" ? "block" : "none" }}
+          onContextMenu={(e) => e.preventDefault()}
         />
 
         {/* Top right controls - same position for both modes */}
@@ -1793,6 +1815,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
                   config={graphvizConfig}
                   onConfigChange={setGraphvizConfig}
                   onDownloadGv={downloadGraphvizFile}
+                  onDownloadSvg={() => graphvizViewerRef.current?.downloadSvg()}
                   currentLayout={currentLayout}
                   onLayoutChange={handleLayoutChange}
                   layoutDirection={layoutDirection}

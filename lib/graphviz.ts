@@ -128,7 +128,7 @@ export function generateGraphvizDot(
   // Add nodes with appropriate colors
   framework.args.forEach((arg) => {
     let color = config.undecidedColor
-    
+
     // Determine node color based on semantics result if available
     if (semanticsResult) {
       if (isGroundedSemantics) {
@@ -141,7 +141,7 @@ export function generateGraphvizDot(
       } else {
         // Non-grounded semantics: check if node was UNDEC in grounded for lighter colors
         const wasUndecidedInGrounded = groundedResult?.undecided?.includes(arg.id) ?? false
-        
+
         if (semanticsResult.accepted.includes(arg.id)) {
           // Use lighter blue if was UNDEC in grounded, otherwise normal blue
           color = wasUndecidedInGrounded ? "#a6e9ff" : config.acceptedColor
@@ -187,7 +187,7 @@ export function generateGraphvizDot(
   // Build edge info map for quick lookup
   // For non-grounded semantics, compute edge types based on current extension
   const edgeInfoMap = new Map<string, EdgeInfo>()
-  
+
   if (semantics === "grounded" && groundedResult?.edges) {
     // For grounded semantics, use the pre-computed edges
     for (const edge of groundedResult.edges) {
@@ -199,7 +199,7 @@ export function generateGraphvizDot(
     const acceptedSet = new Set(semanticsResult.accepted)
     const rejectedSet = new Set(semanticsResult.rejected)
     const undecidedSet = new Set(semanticsResult.undecided)
-    
+
     // Build grounded edge info map for comparison
     const groundedEdgeMap = new Map<string, EdgeInfo>()
     if (groundedResult?.edges) {
@@ -207,7 +207,7 @@ export function generateGraphvizDot(
         groundedEdgeMap.set(`${edge.from}->${edge.to}`, edge)
       }
     }
-    
+
     for (const attack of framework.attacks) {
       const fromAccepted = acceptedSet.has(attack.from)
       const fromRejected = rejectedSet.has(attack.from)
@@ -257,15 +257,15 @@ export function generateGraphvizDot(
   framework.attacks.forEach((attack) => {
     const edgeKey = `${attack.from}->${attack.to}`
     const edgeInfo = edgeInfoMap.get(edgeKey)
-    
+
     // If we have edge info, check for dir=back logic based on config
     if (edgeInfo) {
       const style = getEdgeStyle(edgeInfo.type)
-      
+
       // Get lengths for from and to nodes
       const fromLen = nodeLengths.get(attack.from)
       const toLen = nodeLengths.get(attack.to)
-      
+
       // Determine if this is an "against wind" edge (from higher length to lower length)
       // Against wind: fromLen > toLen (or fromLen is ∞ and toLen is not)
       let againstWind = false
@@ -274,7 +274,7 @@ export function generateGraphvizDot(
         const toNum = toLen === "∞" ? Infinity : (toLen as number)
         againstWind = fromNum > toNum
       }
-      
+
       if (config.showEdgeLabels) {
         // Show full styling with colors and labels
         if (againstWind) {
@@ -291,7 +291,7 @@ export function generateGraphvizDot(
             `arrowtail="${style.arrowtail}"`,
             `arrowhead="${style.arrowhead}"`,
           ]
-          
+
           // Add taillabel with length (except for blunder which has no label)
           if (edgeInfo.type !== "blunder") {
             const lengthStr = edgeInfo.length === "∞" ? "∞" : String(edgeInfo.length)
@@ -299,7 +299,7 @@ export function generateGraphvizDot(
           } else {
             edgeAttrs.push(`taillabel=""`)
           }
-          
+
           dot += `  "${attack.from}" -> "${attack.to}" [${edgeAttrs.join(" ")}]\n`
         }
       } else {
@@ -320,10 +320,10 @@ export function generateGraphvizDot(
   // Add rank=same statements if enabled and we have grounded result with provenance
   if (config.rankByLength && groundedResult?.provenance) {
     dot += "\n"
-    
+
     // Group nodes by their length (exclude ∞ nodes from ranking)
     const nodesByLength = new Map<number, string[]>()
-    
+
     framework.args.forEach((arg) => {
       const provenance = groundedResult.provenance[arg.id]
       if (provenance?.length !== undefined && provenance.length !== Infinity) {

@@ -1,14 +1,15 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
-import { HelpCircle, X } from "lucide-react"
+import { HelpCircle, X, ChevronDown, ChevronRight } from "lucide-react"
 import { computeSemantics } from "@/lib/argumentation"
+import { computeCriticalAttacks } from "@/lib/clingo-semantics"
 import type { ArgumentFramework, Semantics, SemanticsResult, Extension } from "@/lib/types"
 import { useEffect, useState, useRef } from "react"
 
@@ -17,17 +18,26 @@ interface SemanticsPanelProps {
   selectedSemantics: Semantics | null
   onSemanticsChange: (semantics: Semantics | null) => void
   onExtensionSelect?: (extension: string[], rejected: string[], undecided: string[]) => void
+  onSuspendCriticalAttacks?: (suspendedAttacks: Array<{ from: string; to: string }> | null) => void
+  onHighlightCriticalAttacks?: (attacks: Array<{ from: string; to: string }> | null) => void
 }
 
 // Label filter options
 type LabelFilter = "IN" | "UNDEC" | "OUT"
 
-export default function SemanticsPanel({ framework, selectedSemantics, onSemanticsChange, onExtensionSelect }: SemanticsPanelProps) {
+export default function SemanticsPanel({ framework, selectedSemantics, onSemanticsChange, onExtensionSelect, onSuspendCriticalAttacks, onHighlightCriticalAttacks }: SemanticsPanelProps) {
   const [semanticsResult, setSemanticsResult] = useState<SemanticsResult | null>(null)
   const [isComputing, setIsComputing] = useState(false)
   const [selectedExtensionValue, setSelectedExtensionValue] = useState<string | null>(null)
   const [labelFilters, setLabelFilters] = useState<LabelFilter[]>(["IN"])
   const computationIdRef = useRef(0)
+  
+  // Critical attacks state
+  const [criticalAttackSets, setCriticalAttackSets] = useState<Array<Array<{ from: string; to: string }>>>([])
+  const [selectedCriticalSetIndex, setSelectedCriticalSetIndex] = useState<number | null>(null)
+  const [isComputingCritical, setIsComputingCritical] = useState(false)
+  const [criticalExpanded, setCriticalExpanded] = useState(true)
+  const [suspendCriticalAttacks, setSuspendCriticalAttacks] = useState(false)
 
   // Semantics options in the correct order: Grounded, Stable, Preferred, Complete
   const semanticsOptions: { value: Semantics; label: string; description: string }[] = [
@@ -123,6 +133,77 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
 
     runComputation()
   }, [framework, selectedSemantics])
+
+  // Compute critical attacks when framework or selected extension changes
+  useEffect(() => {
+    if (!framework) {
+      setCriticalAttackSets([])
+      setSelectedCriticalSetIndex(null)
+      setSuspendCriticalAttacks(false)
+      return
+    }
+
+    // Parse the selected extension value to get accepted/rejected/undecided
+    let extensionData: { accepted: string[]; rejected: string[]; undecided: string[] } | null = null
+    if (selectedExtensionValue) {
+      const { inArgs, undecArgs, outArgs } = parseExtensionValue(selectedExtensionValue)
+      extensionData = {
+        accepted: inArgs,
+        rejected: outArgs,
+        undecided: undecArgs
+      }
+    }
+
+    // Need an extension to compute critical attacks
+    if (!extensionData) {
+      setCriticalAttackSets([])
+      setSelectedCriticalSetIndex(null)
+      setSuspendCriticalAttacks(false)
+      return
+    }
+
+    setIsComputingCritical(true)
+    setCriticalAttackSets([])
+    setSelectedCriticalSetIndex(null)
+    setSuspendCriticalAttacks(false)
+    
+    const runCriticalComputation = async () => {
+      try {
+        const result = await computeCriticalAttacks(framework, extensionData)
+        setCriticalAttackSets(result.criticalAttackSets)
+        // Don't auto-select - user must click to select and highlight
+      } catch (error) {
+        console.error("Error computing critical attacks:", error)
+        setCriticalAttackSets([])
+      } finally {
+        setIsComputingCritical(false)
+      }
+    }
+
+    runCriticalComputation()
+  }, [framework, selectedExtensionValue])
+
+  // Notify parent when suspend toggle changes
+  useEffect(() => {
+    if (onSuspendCriticalAttacks) {
+      if (suspendCriticalAttacks && selectedCriticalSetIndex !== null && criticalAttackSets[selectedCriticalSetIndex]) {
+        onSuspendCriticalAttacks(criticalAttackSets[selectedCriticalSetIndex])
+      } else {
+        onSuspendCriticalAttacks(null)
+      }
+    }
+  }, [suspendCriticalAttacks, selectedCriticalSetIndex, criticalAttackSets, onSuspendCriticalAttacks])
+
+  // Notify parent when critical attack selection changes (for highlighting)
+  useEffect(() => {
+    if (onHighlightCriticalAttacks) {
+      if (selectedCriticalSetIndex !== null && criticalAttackSets[selectedCriticalSetIndex]) {
+        onHighlightCriticalAttacks(criticalAttackSets[selectedCriticalSetIndex])
+      } else {
+        onHighlightCriticalAttacks(null)
+      }
+    }
+  }, [selectedCriticalSetIndex, criticalAttackSets, onHighlightCriticalAttacks])
 
   // Notify parent when extension selection changes
   useEffect(() => {
@@ -380,7 +461,7 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
   }
 
   return (
-    <Card className="h-full overflow-auto">
+    <Card className="h-full overflow-y-auto">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <CardTitle>Evaluation</CardTitle>
@@ -463,6 +544,103 @@ export default function SemanticsPanel({ framework, selectedSemantics, onSemanti
 
         {!selectedSemantics && framework && (
           <p className="text-sm text-muted-foreground">Select a semantics to evaluate the framework</p>
+        )}
+
+        {/* Critical Attacks Section - only show for non-grounded semantics */}
+        {framework && selectedSemantics && selectedSemantics !== "grounded" && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div 
+                className="flex items-center gap-2 cursor-pointer"
+                onClick={() => setCriticalExpanded(!criticalExpanded)}
+              >
+                {criticalExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                <h4 className="text-sm font-bold">Critical Attacks</h4>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button onClick={(e) => e.stopPropagation()}>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-pointer" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="right" className="max-w-xs text-sm">
+                    <p>Critical attacks are attacks between undecided arguments that, when removed, allow more arguments to be accepted. Select a set and toggle "Suspend" to see the effect.</p>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              {criticalExpanded && (
+                <div className="pl-6 space-y-3">
+                  {/* Critical Attack Sets */}
+                  {!selectedExtensionValue ? (
+                    <p className="text-xs text-muted-foreground italic">Select an extension above to compute critical attacks</p>
+                  ) : isComputingCritical ? (
+                    <p className="text-xs text-muted-foreground">Computing critical attacks...</p>
+                  ) : criticalAttackSets.length > 0 ? (
+                    <>
+                      {/* Critical Attack Sets - clickable to toggle selection */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium">Critical Attack Sets:</Label>
+                        <div className="space-y-2">
+                          {criticalAttackSets.map((attackSet, idx) => (
+                            <div 
+                              key={idx} 
+                              className={`text-xs font-mono cursor-pointer p-1.5 rounded flex-1 border-2 transition-colors ${
+                                selectedCriticalSetIndex === idx 
+                                  ? 'bg-red-50 border-red-400' 
+                                  : 'bg-orange-50 border-orange-200 hover:border-orange-300'
+                              }`}
+                              onClick={() => {
+                                // Toggle selection - click again to deselect
+                                if (selectedCriticalSetIndex === idx) {
+                                  setSelectedCriticalSetIndex(null)
+                                  setSuspendCriticalAttacks(false)
+                                } else {
+                                  setSelectedCriticalSetIndex(idx)
+                                }
+                              }}
+                            >
+                              {attackSet.length === 0 ? (
+                                <span className="text-muted-foreground italic">Empty set</span>
+                              ) : (
+                                <>
+                                  Set {idx + 1}: {attackSet.map((attack, i) => (
+                                    <span key={i}>
+                                      ({attack.from}, {attack.to})
+                                      {i < attackSet.length - 1 && ", "}
+                                    </span>
+                                  ))}
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Suspend Critical Attacks Toggle */}
+                      <div className="flex items-center space-x-2 pt-2">
+                        <Switch
+                          id="suspend-critical"
+                          checked={suspendCriticalAttacks}
+                          onCheckedChange={setSuspendCriticalAttacks}
+                          disabled={selectedCriticalSetIndex === null}
+                        />
+                        <Label htmlFor="suspend-critical" className="text-xs cursor-pointer">
+                          Suspend Critical Attacks
+                        </Label>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-red-500 italic">No critical attacks under the selected extension</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
