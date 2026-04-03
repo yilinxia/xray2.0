@@ -115,6 +115,24 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
     }
   }, [framework, suspendedAttacks])
 
+  // Recalculated grounded result when attacks are suspended
+  const [suspendedGroundedResult, setSuspendedGroundedResult] = useState<any>(null)
+
+  // Recalculate grounded semantics when attacks are suspended
+  useEffect(() => {
+    if (suspendedAttacks && suspendedAttacks.length > 0 && effectiveFramework) {
+      // Recalculate grounded semantics on the modified framework
+      computeSemantics(effectiveFramework, "grounded").then((result) => {
+        setSuspendedGroundedResult(result)
+      })
+    } else {
+      setSuspendedGroundedResult(null)
+    }
+  }, [effectiveFramework, suspendedAttacks])
+
+  // Use suspended grounded result if available, otherwise use normal grounded result
+  const effectiveGroundedResult = suspendedGroundedResult || groundedResult
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     open: boolean
@@ -1754,7 +1772,7 @@ export default function ArgumentGraph({ framework, initialFramework, semantics, 
             framework={effectiveFramework}
             semantics={semantics}
             selectedExtension={selectedExtension}
-            groundedResult={groundedResult}
+            groundedResult={effectiveGroundedResult}
             config={graphvizConfig}
             selectedNode={selectedNode}
             onNodeClick={(nodeId) => {
