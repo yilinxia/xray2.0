@@ -4,6 +4,7 @@ import {
   STABLE_ENCODING,
   PREFERRED_ENCODING,
   COMPLETE_ENCODING,
+  THREE_PROV_CAL_ENCODING,
 } from "./encodings"
 
 // Type for provenance result
@@ -12,28 +13,8 @@ export interface ProvenanceResult {
   edges: Array<{ from: string; to: string }>
 }
 
-// Cache for the provenance encoding
-let provenanceEncodingCache: string | null = null
-
-async function getProvenanceEncoding(): Promise<string> {
-  if (provenanceEncodingCache) {
-    return provenanceEncodingCache
-  }
-  
-  try {
-    console.log("[getProvenanceEncoding] Fetching encoding from /clingo/three_prov_cal.dl")
-    const response = await fetch('/clingo/three_prov_cal.dl')
-    if (!response.ok) {
-      throw new Error(`Failed to fetch provenance encoding: ${response.status}`)
-    }
-    provenanceEncodingCache = await response.text()
-    console.log("[getProvenanceEncoding] Encoding loaded, length:", provenanceEncodingCache.length)
-    console.log("[getProvenanceEncoding] First 200 chars:", provenanceEncodingCache.slice(0, 200))
-    return provenanceEncodingCache
-  } catch (error) {
-    console.error("Error fetching provenance encoding:", error)
-    throw error
-  }
+function getProvenanceEncoding(): string {
+  return THREE_PROV_CAL_ENCODING
 }
 
 // Type for clingo-wasm result
@@ -949,7 +930,7 @@ export async function computeProvenance(
   
   try {
     const run = await getClingoRun()
-    const provenanceEncoding = await getProvenanceEncoding()
+    const provenanceEncoding = getProvenanceEncoding()
     
     // Create ID mapping for safe ASP identifiers
     const { toASP, fromASP } = createIdMapping(framework)
